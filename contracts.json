@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "sourceRepository": "https://github.com/eloizxyz/protocol-contracts-stellar",
+  "stellarCli": "27.1.0",
+  "stellarSdk": "16.3.0",
+  "platform": "darwin-arm64",
+  "source": {
+    "commit": "58991b892394d08b218251a77a087710f3523db1",
+    "dirty": false,
+    "buildInputsSha256": "d660aeffef12c866ae22bfc5d49696d196f2a2ecf548a87c385f659952f0870f",
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "sha256": "49d4da826eb05040f39e706ca51c3ab9635a46827d9f3d36bafeed2c4fabb254"
+      },
+      {
+        "path": "Cargo.toml",
+        "sha256": "3e2c388bd433a31bf07ec185576d70b147fad80f4ced58f8b39063a44fad273e"
+      },
+      {
+        "path": "contracts/fuul-core/Cargo.toml",
+        "sha256": "58403c804f7c70cf19c79733f2dc9ace756cf96dd504d9af32e202b8e96747e5"
+      },
+      {
+        "path": "contracts/fuul-core/src/access.rs",
+        "sha256": "7cf36287f99e43671441ae4a384181b6e892dfaab51ef83fecc15497f2ad6157"
+      },
+      {
+        "path": "contracts/fuul-core/src/fees.rs",
+        "sha256": "0e39d1009d0b362d5b47b68bf076cb41df319eac466c52e70422616933abae70"
+      },
+      {
+        "path": "contracts/fuul-core/src/interfaces.rs",
+        "sha256": "dae4b45c13810a59e25da55b3b800f2c36db47e27d417709d8934701682bb61d"
+      },
+      {
+        "path": "contracts/fuul-core/src/lib.rs",
+        "sha256": "93093e066a87644554f7ad9f1af6a23235e559d451ff39bb3b77f4bb31cd5e2e"
+      },
+      {
+        "path": "contracts/fuul-core/src/storage.rs",
+        "sha256": "bc1f713600e127a627ada59beaf1872ddb6486df0eb08bbf76327595f1b22506"
+      },
+      {
+        "path": "contracts/fuul-core/src/types.rs",
+        "sha256": "c6e3a9796b4d1a4e7d11bbba6794bd590b30615fd3e0e3966a4210e75b16305b"
+      },
+      {
+        "path": "contracts/fuul-core/src/upgrade.rs",
+        "sha256": "055922ec23c80288aa18ffe8e7a233235219b434b66aace6ea66ad1365dd7f4e"
+      },
+      {
+        "path": "contracts/fuul-factory/Cargo.toml",
+        "sha256": "980a3ee33621005fecd868799ea2858a0c8ba37f44def10ceb35ad432a11435e"
+      },
+      {
+        "path": "contracts/fuul-factory/src/contract.rs",
+        "sha256": "985307ff6aa415b29f12bad40a2d0aeb70c04279f2d5f435f2dd3fd611210b61"
+      },
+      {
+        "path": "contracts/fuul-factory/src/error.rs",
+        "sha256": "a2a51558c3a15699ebed11b77ac62375d672823bc6ef0164c3a262cf02b4444d"
+      },
+      {
+        "path": "contracts/fuul-factory/src/events.rs",
+        "sha256": "fb36cd21590c077df8e65b290b1a0a36921a2b474f1d7477b3cab44e3ca6e3c4"
+      },
+      {
+        "path": "contracts/fuul-factory/src/lib.rs",
+        "sha256": "30dbbef98b7bc5ed8c524012836120230d3f47fe5820c02c34089f2d91ee07bf"
+      },
+      {
+        "path": "contracts/fuul-factory/src/storage.rs",
+        "sha256": "6ee64febe5b5e316865142589dad140f02dc412ae4e581beff1bb7aa5bd1277b"
+      },
+      {
+        "path": "contracts/fuul-manager/Cargo.toml",
+        "sha256": "91c4bbb180d617d52c878ae7c2202661bdf9b1a1a226d1d13f721e365da3acd5"
+      },
+      {
+        "path": "contracts/fuul-manager/src/contract.rs",
+        "sha256": "df764db539923626ed92de0e3dcc40ae52aa9fc65251ec55362fa347b80f3b13"
+      },
+      {
+        "path": "contracts/fuul-manager/src/error.rs",
+        "sha256": "3948fc18e08dcae1fea724c8246c3aca0fe560778698ca6cc080dfe2c6bbd0f6"
+      },
+      {
+        "path": "contracts/fuul-manager/src/events.rs",
+        "sha256": "02b4c64344993372be641e6b8edc1ce1a66c2e1c6d0a11a13be7bf18275845a0"
+      },
+      {
+        "path": "contracts/fuul-manager/src/lib.rs",
+        "sha256": "7944a3054fae88694e1beb27b1f0575e29a17c2a7b892fbcb5984d75fe7b9791"
+      },
+      {
+        "path": "contracts/fuul-manager/src/pausable.rs",
+        "sha256": "a70e35139f248002aa9c302780f93bc8c86ee308310a9511e6e8464671ed4c8d"
+      },
+      {
+        "path": "contracts/fuul-manager/src/storage.rs",
+        "sha256": "7378395820f7158d6e0333ce5d2be1269485fe9e088c9e7a19a135c23e3ded5a"
+      },
+      {
+        "path": "contracts/fuul-manager/src/types.rs",
+        "sha256": "4bcf3c8b2bbfc9b4afdb3ee7621392d26c17610a278c1b0c39bce2d282265b1c"
+      },
+      {
+        "path": "contracts/fuul-project/Cargo.toml",
+        "sha256": "d41238d9813d02fac35dcdde5a40361dd409e5110f74df22b59e2130792c6cda"
+      },
+      {
+        "path": "contracts/fuul-project/src/contract.rs",
+        "sha256": "ccf76db3159f1edb251d63806a7e8587f119dd7334953053b134abc40131d112"
+      },
+      {
+        "path": "contracts/fuul-project/src/error.rs",
+        "sha256": "d9fd65b1a755fa433adcd455a94f3830fc902c351a27bd53f3be2d06f74de6f9"
+      },
+      {
+        "path": "contracts/fuul-project/src/events.rs",
+        "sha256": "437aca1f796ac9038576e96b40f9d191bc9f0790fdaba343338a4e6b3e058885"
+      },
+      {
+        "path": "contracts/fuul-project/src/lib.rs",
+        "sha256": "c34ee48f4dac2e71f29ae26ea64145684d4332a9c36288d47eeb995aaa019637"
+      },
+      {
+        "path": "contracts/fuul-project/src/storage.rs",
+        "sha256": "9b3a356015471aac2c4708bfd7be41370a12285407372c16ace0f690164b475f"
+      },
+      {
+        "path": "rust-toolchain.toml",
+        "sha256": "3221c61ef998039dbd8797118a742c825fbf6680f39366b38d4f54c326556046"
+      }
+    ]
+  },
+  "contracts": {
+    "fuul-manager": {
+      "upstreamBindingSha256": "d7a68b9cd05c7bedad4b272b9ee65e8dbf655b1278f37b079cb6b8dc96972d5e",
+      "bindingSha256": "bd196147d41e561883a4d3ce7b52034afe80f990f8595a8b7bf82a0e0abace32",
+      "wasmSha256": "6a60035d615fac77b360e08d2616f6bf339d240336d2385579fd9d9b441ae605"
+    },
+    "fuul-factory": {
+      "upstreamBindingSha256": "a34723228eb385cdd73b0acc3e4faa86c26538880064aec58d0290a942fc5cc2",
+      "bindingSha256": "d142374e0d136ee6c49f83012aa88fa2f22afb31b0710ef8f14859ca9f88cebb",
+      "wasmSha256": "7fe118a8c1dbeb0767900d81360efa5e5e82f74fed124ac47db23f1d9e94284b"
+    },
+    "fuul-project": {
+      "upstreamBindingSha256": "845e8c4ec1a41b8dc12f22ceb2aa71e11615ae7e1ccd17454ce31465a9858831",
+      "bindingSha256": "32d092b879048bf7499fdb7fef39c3d4e13401e21decd7498a3ea23de687b584",
+      "wasmSha256": "7a0f0c3c86ad58aa2513643801711af6c86bb4c94cf02195da799aa7b7eb8c38"
+    }
+  }
+}

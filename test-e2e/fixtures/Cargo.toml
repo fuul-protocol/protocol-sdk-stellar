@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["kyc", "nft", "multi-token", "storage"]
+
+[workspace.dependencies]
+soroban-sdk = "=26.1.1"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

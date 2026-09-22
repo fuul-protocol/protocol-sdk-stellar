@@ -1,0 +1,60 @@
+name: SDK checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.12
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test ./test/
+      - run: bun run build
+      - run: node test/package.mjs
+      - run: bun audit
+  e2e:
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        protocol: [27, 28]
+    env:
+      FUUL_E2E_PROTOCOL: ${{ matrix.protocol }}
+      FUUL_CONTRACTS_PATH: .local/contracts
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.12
+      - id: contracts
+        run: node -e 'console.log("commit=" + JSON.parse(require("node:fs").readFileSync("contracts.json")).source.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ vars.CONTRACTS_REPOSITORY || format('{0}/protocol-contracts-stellar', github.repository_owner) }}
+          ref: ${{ steps.contracts.outputs.commit }}
+          path: .local/contracts
+          token: ${{ secrets.CONTRACTS_READ_TOKEN || github.token }}
+      - uses: stellar/stellar-cli@8e402ea28202950b272fbabc34caad4d2f64fe87
+        with:
+          version: 27.1.0
+      - run: rustup toolchain install 1.92.0 --profile minimal --target wasm32v1-none
+      - run: bun install --frozen-lockfile
+      - run: bun run test:e2e

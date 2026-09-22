@@ -1,0 +1,9 @@
+{
+  "package": "@stellar/stellar-sdk",
+  "version": "16.3.0",
+  "path": "types/stellar__js-xdr/index.d.ts",
+  "source": "https://github.com/stellar/js-stellar-sdk/blob/v16.3.0/types/stellar__js-xdr/index.d.ts",
+  "sha256": "772ab5b7753cef9f593b6678a96f48f7e6cdccddae1955d16e26e5e1a24d4a7c",
+  "license": "Apache-2.0",
+  "transform": "No declaration changes. Copy into dist/types and reference it from each exported declaration."
+}
