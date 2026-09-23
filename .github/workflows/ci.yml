@@ -52,7 +52,6 @@ jobs:
           ref: ${{ steps.contracts.outputs.commit }}
           path: .local/contracts
           ssh-key: ${{ secrets.CONTRACTS_DEPLOY_KEY }}
-          token: ${{ secrets.CONTRACTS_READ_TOKEN || github.token }}
       - uses: stellar/stellar-cli@8e402ea28202950b272fbabc34caad4d2f64fe87
         with:
           version: 27.1.0

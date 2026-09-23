@@ -76,7 +76,7 @@ try {
   assert.deepEqual(await snapshot(), source, 'Contract source changed during generation');
   if (!previous) {
     for (const { path, binding } of bindings) await writeFile(path, binding);
-    const provenance = { schemaVersion: 2, sourceRepository: 'https://github.com/eloizxyz/protocol-contracts-stellar',
+    const provenance = { schemaVersion: 2, sourceRepository: 'https://github.com/fuul-protocol/protocol-contracts-stellar',
       stellarCli: '27.1.0', stellarSdk: '16.3.0', platform, source, contracts };
     await writeFile(join(root, 'contracts.json'), JSON.stringify(provenance, null, 2) + '\n');
   }

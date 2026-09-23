@@ -4,7 +4,7 @@ TypeScript clients for Fuul projects, funding, claims, administration, events an
 Supports Node.js 22 and 24, Bun, and browsers with Web Crypto.
 
 Build from this repository or install a release archive. The package is not published to npm.
-The [contracts repository](https://github.com/eloizxyz/protocol-contracts-stellar) contains the Rust contracts.
+The [contracts repository](https://github.com/fuul-protocol/protocol-contracts-stellar) contains the Rust contracts.
 [contracts.json](contracts.json) records their source commit, Wasm hashes and generated binding hashes.
 
 ## Install
@@ -70,9 +70,9 @@ bun audit
 ```
 
 The tests cover SDK behavior and installation in an independent, strict TypeScript consumer.
-The [network test guide](https://github.com/eloizxyz/protocol-sdk-stellar/blob/main/test-e2e/README.md) covers local E2E and an explicit public Testnet run.
-The [deployment guide](https://github.com/eloizxyz/protocol-contracts-stellar/blob/main/deploy.md) includes a Testnet walkthrough and Mainnet configuration.
-The [SDK example](https://github.com/eloizxyz/protocol-sdk-stellar/blob/main/examples/demo.mjs) reads state, funds Projects, submits claims and demonstrates pause controls.
+The [network test guide](https://github.com/fuul-protocol/protocol-sdk-stellar/blob/main/test-e2e/README.md) covers local E2E and an explicit public Testnet run.
+The [deployment guide](https://github.com/fuul-protocol/protocol-contracts-stellar/blob/main/deploy.md) includes a Testnet walkthrough and Mainnet configuration.
+The [SDK example](https://github.com/fuul-protocol/protocol-sdk-stellar/blob/main/examples/demo.mjs) reads state, funds Projects, submits claims and demonstrates pause controls.
 After the guide exports the deployment values, run `node examples/demo.mjs status`. Writes require `--submit`; Mainnet also requires `--mainnet`.
 
 To update contract bindings, use Rust 1.92.0, Stellar CLI 27.1.0 and a clean contracts checkout:

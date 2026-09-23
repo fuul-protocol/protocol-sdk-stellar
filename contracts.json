@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "sourceRepository": "https://github.com/eloizxyz/protocol-contracts-stellar",
+  "sourceRepository": "https://github.com/fuul-protocol/protocol-contracts-stellar",
   "stellarCli": "27.1.0",
   "stellarSdk": "16.3.0",
   "platform": "darwin-arm64",
