@@ -4,7 +4,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { Address, Asset, Contract, Keypair, Operation, StrKey, TransactionBuilder, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction, type SignAuthEntry } from "@stellar/stellar-sdk/contract";
 import { Api, Server, assembleTransaction } from "@stellar/stellar-sdk/rpc";
-import { createFuulRpcServer } from "../dist/index.js";
+import { createFuulRpcServer } from "../dist/esm/index.js";
 import { protocol, networkPassphrase, rpcUrl, evidenceTag, allowHttp, fundTestAccount, guardNetwork } from "./network.js";
 import {
   FuulSdk, FuulError, TransactionExecutor, keypairSigner, submitSignedTransaction, readContract,
@@ -12,7 +12,7 @@ import {
   currencyType, claimReason, createClaimCheck, randomClaimProof, claimAuthorizations, type ExpectedAuthorization,
   calculateFee, getEventPage, watchEvents,
   FuulActions, getContractState, verifyDeployment, prepareLifecycleTransaction, signPreparedTransaction,
-} from "../dist/index.js";
+} from "../dist/esm/index.js";
 
 const rpc = createFuulRpcServer(rpcUrl, { allowHttp });
 // Disposable test keys stay in memory. Neither mode accepts an arbitrary RPC URL or Mainnet passphrase.

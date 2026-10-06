@@ -3,24 +3,21 @@
 TypeScript clients for Fuul projects, funding, claims, administration, events and contract storage.
 Supports Node.js 22 and 24, Bun, and browsers with Web Crypto.
 
-Build from this repository or install a release archive. The package is not published to npm.
+Ships as ESM and CommonJS builds.
 The [contracts repository](https://github.com/fuul-protocol/protocol-contracts-stellar) contains the Rust contracts.
 [contracts.json](contracts.json) records their source commit, Wasm hashes and generated binding hashes.
 
 ## Install
 
-Build with Node.js 22 and Bun 1.3.12:
+```sh
+npm install @fuul/sdk-stellar
+```
+
+To build from source, use Node.js 22 and Bun 1.3.12:
 
 ```sh
 bun install --frozen-lockfile
 bun run build
-npm pack --ignore-scripts
-```
-
-Install the archive in your application:
-
-```sh
-npm install /path/to/fuul-protocol-stellar-sdk-0.2.0-rc.8.tgz
 ```
 
 ## Create a project
@@ -28,7 +25,7 @@ npm install /path/to/fuul-protocol-stellar-sdk-0.2.0-rc.8.tgz
 Supply the network settings, deployed addresses and a wallet that implements `FuulSigner`.
 
 ```ts
-import { FuulActions, FuulSdk } from "@fuul-protocol/stellar-sdk";
+import { FuulActions, FuulSdk } from "@fuul/sdk-stellar";
 
 const sdk = new FuulSdk({
   rpcUrl,
@@ -83,3 +80,20 @@ node scripts/bindings.mjs verify ../protocol-contracts-stellar
 ```
 
 Both commands rebuild contracts in an isolated directory. Verification uses the recorded build platform and rejects changed sources, bindings or Wasm hashes.
+
+## Publishing to npm
+
+Releases are published manually from `main`; the npm account has 2FA, so publishing needs a one-time password.
+
+```sh
+git switch main && git pull
+bun install --frozen-lockfile
+bun run typecheck && bun test ./test/
+npm pkg set version=<version>
+bun run build && node test/package.mjs
+npm publish --dry-run
+npm publish --otp=<code>
+```
+
+Check the version and that the file list contains `dist/esm`, `dist/cjs` and `dist/types` before publishing.
+Then commit the version bump and open a PR against `main`.

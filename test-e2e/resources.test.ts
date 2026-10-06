@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { Address, Asset, Contract, Keypair, Operation, Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
-import { checkSorobanResources, createFuulRpcServer, inspectSorobanResources, readSorobanResourceLimits, submitSignedTransaction } from "../dist/index.js";
+import { checkSorobanResources, createFuulRpcServer, inspectSorobanResources, readSorobanResourceLimits, submitSignedTransaction } from "../dist/esm/index.js";
 import { protocol, target, networkPassphrase, rpcUrl, allowHttp, fundTestAccount, guardNetwork } from "./network.js";
 
 test("resource checks agree with Core rejection and permit signed normal and fee-bump calls", async () => {

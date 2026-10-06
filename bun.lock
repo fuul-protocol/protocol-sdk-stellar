@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@fuul-protocol/stellar-sdk",
+      "name": "@fuul/sdk-stellar",
       "dependencies": {
         "@stellar/stellar-sdk": "16.3.0",
         "@types/json-schema": "7.0.15",
