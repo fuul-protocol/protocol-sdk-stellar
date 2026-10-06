@@ -28,6 +28,8 @@ jobs:
       - run: bun audit
   e2e:
     needs: package
+    # Fork PRs get no secrets, so the private contracts checkout cannot run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
