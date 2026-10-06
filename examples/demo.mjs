@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
 import { FuulActions, FuulSdk, claimReason, currencyType, keypairSigner,
-  readContract, verifyDeployment, waitForTransaction } from '@fuul-protocol/stellar-sdk';
+  readContract, verifyDeployment, waitForTransaction } from '@fuul/sdk-stellar';
 
 const env = name => { assert(process.env[name], `Set ${name} first; see deploy.md.`); return process.env[name]; };
 const json = value => JSON.stringify(value, (_, item) => typeof item === 'bigint' ? item.toString() : item, 2);

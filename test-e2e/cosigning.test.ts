@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { Address, Asset, Contract, FeeBumpTransaction, Keypair, Operation, Transaction, TransactionBuilder, nativeToScVal } from "@stellar/stellar-sdk";
 import { Api } from "@stellar/stellar-sdk/rpc";
-import { cosignPreparedTransaction, createFuulRpcServer, keypairSigner, submitSignedTransaction } from "../dist/index.js";
+import { cosignPreparedTransaction, createFuulRpcServer, keypairSigner, submitSignedTransaction } from "../dist/esm/index.js";
 import { protocol, networkPassphrase, rpcUrl, evidenceTag, allowHttp, fundTestAccount, guardNetwork } from "./network.js";
 
 test("cosigns Soroban transfers and fee-bump envelopes with disabled account master keys", async () => {

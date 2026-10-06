@@ -159,7 +159,7 @@ Earlier protocols and missing, duplicate or malformed settings fail with `RESOUR
 Custom RPC clients passed to `submitSignedTransaction` must provide `getLedgerEntries`, in addition to the existing methods.
 
 ```ts
-import { checkSorobanResources } from "@fuul-protocol/stellar-sdk/resources";
+import { checkSorobanResources } from "@fuul/sdk-stellar/resources";
 
 // signedTransaction has already been reviewed and signed.
 const report = await checkSorobanResources(rpc, signedTransaction);

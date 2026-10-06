@@ -1,9 +1,16 @@
 {
-  "name": "@fuul-protocol/stellar-sdk",
-  "version": "0.2.0-rc.8",
+  "name": "@fuul/sdk-stellar",
+  "version": "0.2.0",
   "description": "Typed SDK for the Fuul protocol on Stellar",
   "type": "module",
   "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fuul-protocol/protocol-sdk-stellar.git"
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
   "files": [
     "dist",
     "README.md",
@@ -14,44 +21,104 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
     },
     "./contracts/fuul-factory": {
-      "types": "./dist/contracts/fuul-factory/index.d.ts",
-      "import": "./dist/contracts/fuul-factory/index.js"
+      "import": {
+        "types": "./dist/esm/contracts/fuul-factory/index.d.ts",
+        "default": "./dist/esm/contracts/fuul-factory/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/contracts/fuul-factory/index.d.ts",
+        "default": "./dist/cjs/contracts/fuul-factory/index.js"
+      }
     },
     "./contracts/fuul-manager": {
-      "types": "./dist/contracts/fuul-manager/index.d.ts",
-      "import": "./dist/contracts/fuul-manager/index.js"
+      "import": {
+        "types": "./dist/esm/contracts/fuul-manager/index.d.ts",
+        "default": "./dist/esm/contracts/fuul-manager/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/contracts/fuul-manager/index.d.ts",
+        "default": "./dist/cjs/contracts/fuul-manager/index.js"
+      }
     },
     "./contracts/fuul-project": {
-      "types": "./dist/contracts/fuul-project/index.d.ts",
-      "import": "./dist/contracts/fuul-project/index.js"
+      "import": {
+        "types": "./dist/esm/contracts/fuul-project/index.d.ts",
+        "default": "./dist/esm/contracts/fuul-project/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/contracts/fuul-project/index.d.ts",
+        "default": "./dist/cjs/contracts/fuul-project/index.js"
+      }
     },
     "./amounts": {
-      "types": "./dist/amounts.d.ts",
-      "import": "./dist/amounts.js"
+      "import": {
+        "types": "./dist/esm/amounts.d.ts",
+        "default": "./dist/esm/amounts.js"
+      },
+      "require": {
+        "types": "./dist/cjs/amounts.d.ts",
+        "default": "./dist/cjs/amounts.js"
+      }
     },
     "./transactions": {
-      "types": "./dist/transactions.d.ts",
-      "import": "./dist/transactions.js"
+      "import": {
+        "types": "./dist/esm/transactions.d.ts",
+        "default": "./dist/esm/transactions.js"
+      },
+      "require": {
+        "types": "./dist/cjs/transactions.d.ts",
+        "default": "./dist/cjs/transactions.js"
+      }
     },
     "./resources": {
-      "types": "./dist/resources.d.ts",
-      "import": "./dist/resources.js"
+      "import": {
+        "types": "./dist/esm/resources.d.ts",
+        "default": "./dist/esm/resources.js"
+      },
+      "require": {
+        "types": "./dist/cjs/resources.d.ts",
+        "default": "./dist/cjs/resources.js"
+      }
     },
     "./events": {
-      "types": "./dist/events.d.ts",
-      "import": "./dist/events.js"
+      "import": {
+        "types": "./dist/esm/events.d.ts",
+        "default": "./dist/esm/events.js"
+      },
+      "require": {
+        "types": "./dist/cjs/events.d.ts",
+        "default": "./dist/cjs/events.js"
+      }
     },
     "./adapters": {
-      "types": "./dist/adapters.d.ts",
-      "import": "./dist/adapters.js"
+      "import": {
+        "types": "./dist/esm/adapters.d.ts",
+        "default": "./dist/esm/adapters.js"
+      },
+      "require": {
+        "types": "./dist/cjs/adapters.d.ts",
+        "default": "./dist/cjs/adapters.js"
+      }
     },
     "./lifecycle": {
-      "types": "./dist/lifecycle.d.ts",
-      "import": "./dist/lifecycle.js"
+      "import": {
+        "types": "./dist/esm/lifecycle.d.ts",
+        "default": "./dist/esm/lifecycle.js"
+      },
+      "require": {
+        "types": "./dist/cjs/lifecycle.d.ts",
+        "default": "./dist/cjs/lifecycle.js"
+      }
     }
   },
   "scripts": {
@@ -74,7 +141,9 @@
     "node": ">=22.0.0"
   },
   "license": "UNLICENSED",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "overrides": {
     "uuid": "11.1.1"
   }

@@ -9,11 +9,15 @@ const root = new URL('../', import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'fuul-sdk-consumer-'));
 try {
 const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', temporary], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0];
-assert.ok(packed.files.some(file => file.path === 'dist/index.js'));
+assert.ok(packed.files.some(file => file.path === 'dist/esm/index.js'));
+assert.ok(packed.files.some(file => file.path === 'dist/cjs/index.js'));
 assert.ok(packed.files.every(file => !/^(test|fixtures|\.local|node_modules|\.env)/.test(file.path)));
-const sources = (await readdir(new URL('src/', root), { recursive: true })).filter(path => path.endsWith('.ts'));
-const outputs = sources.flatMap(path => ['.js', '.js.map', '.d.ts', '.d.ts.map'].map(extension => `dist/${path.slice(0, -3)}${extension}`));
-outputs.push('dist/types/stellar-js-xdr.d.ts');
+const sources = (await readdir(new URL('src/', root), { recursive: true })).map(path => path.replaceAll('\\', '/')).filter(path => path.endsWith('.ts'));
+const outputs = sources.flatMap(path => [
+  ...['.js', '.js.map', '.d.ts', '.d.ts.map'].map(extension => `dist/esm/${path.slice(0, -3)}${extension}`),
+  ...['.js', '.d.ts'].map(extension => `dist/cjs/${path.slice(0, -3)}${extension}`),
+]);
+outputs.push('dist/cjs/package.json', 'dist/types/stellar-js-xdr.d.ts');
 assert.deepEqual(packed.files.map(file => file.path).filter(path => path.startsWith('dist/')).sort(), outputs.sort(),
   'The package must contain the current source outputs and licensed XDR declaration only');
 const consumer = join(temporary, 'consumer'); await mkdir(consumer);
@@ -45,6 +49,17 @@ assert.equal(resource.usage.transactionBytes, BigInt(restore.toEnvelope().toXDR(
 console.log('Packed package installed and imported in an independent Node consumer.');
 `);
 execFileSync(process.execPath, ['check.mjs'], { cwd: consumer, stdio: 'inherit' });
+await writeFile(join(consumer, 'check.cjs'), `
+const assert = require('node:assert/strict');
+for (const name of ${JSON.stringify(imports)}) assert.ok(Object.keys(require(name)).length, name);
+const { parseAmount, formatAmount, keypairSigner, claimAuthorizations } = require(${JSON.stringify(pkg.name)});
+const { Keypair } = require('@stellar/stellar-sdk');
+assert.equal(parseAmount(formatAmount(9007199254740993n)), 9007199254740993n);
+assert.equal(keypairSigner(Keypair.random()).address.length, 56);
+assert.equal(typeof claimAuthorizations, 'function');
+console.log('Packed package required from an independent CommonJS consumer.');
+`);
+execFileSync(process.execPath, ['check.cjs'], { cwd: consumer, stdio: 'inherit' });
 await writeFile(join(consumer, 'check.ts'), `${imports.map((name, index) => `import * as entry${index} from ${JSON.stringify(name)};\nvoid entry${index};`).join('\n')}
 import { FuulSdk, parseAmount, cosignPreparedTransaction, type CosignOptions, type FuulSigner, type SorobanResourceLimits } from ${JSON.stringify(pkg.name)};
 import { Transaction, FeeBumpTransaction } from '@stellar/stellar-sdk';
@@ -68,7 +83,13 @@ cosignPreparedTransaction(transaction, signer, { maxFeeStroops: amount });
 // @ts-expect-error Floating point amounts must not satisfy the bigint fee API.
 sdk.executor({ signer, maxFeeStroops: 1.5 });
 `);
-await writeFile(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', skipLibCheck: false, types: [] }, include: ['check.ts'] }));
+await writeFile(join(consumer, 'check-require.cts'), `${imports.map((name, index) => `import entry${index} = require(${JSON.stringify(name)});\nvoid entry${index};`).join('\n')}
+import sdk = require(${JSON.stringify(pkg.name)});
+const amount: bigint = sdk.parseAmount('1');
+declare const client: sdk.FuulSdk;
+void amount; void client;
+`);
+await writeFile(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', skipLibCheck: false, types: [] }, include: ['check.ts', 'check-require.cts'] }));
 execFileSync(process.execPath, [fileURLToPath(new URL('node_modules/typescript/bin/tsc', root)), '-p', 'tsconfig.json'], { cwd: consumer, stdio: 'inherit' });
 console.log('Installed declarations passed a strict TypeScript consumer check.');
 const audited = spawnSync('npm', ['audit', '--omit=dev', '--json'], { cwd: consumer, encoding: 'utf8' });
