@@ -3,7 +3,7 @@ import type { Api } from "@stellar/stellar-sdk/rpc";
 
 /** Independent, deliberately small limits. These are test inputs, never network defaults. */
 export function resourceConfigFixture(): Api.GetLedgerEntriesResponse {
-  const i64 = (value: number) => xdr.Int64.fromString(String(value));
+  const i64 = (value: number) => BigInt(value);
   const settings = [
     xdr.ConfigSettingEntry.configSettingContractComputeV0(new xdr.ConfigSettingContractComputeV0({
       ledgerMaxInstructions: i64(200_000), txMaxInstructions: i64(100_000), feeRatePerInstructionsIncrement: i64(1), txMemoryLimit: 40_000_000,
@@ -19,7 +19,7 @@ export function resourceConfigFixture(): Api.GetLedgerEntriesResponse {
     xdr.ConfigSettingEntry.configSettingContractDataKeySizeBytes(250),
   ];
   return { latestLedger: 100, entries: settings.map(setting => ({ lastModifiedLedgerSeq: 90,
-    key: xdr.LedgerKey.configSetting(new xdr.LedgerKeyConfigSetting({ configSettingId: setting.switch() })),
+    key: xdr.LedgerKey.configSetting(new xdr.LedgerKeyConfigSetting({ configSettingId: xdr.ConfigSettingId[setting.type] })),
     val: xdr.LedgerEntryData.configSetting(setting),
   })) };
 }

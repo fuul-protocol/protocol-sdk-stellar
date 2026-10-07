@@ -10,8 +10,22 @@ const [target = 'local', ...extra] = process.argv.slice(2);
 assert(['local', 'testnet'].includes(target) && !extra.length, 'Usage: node test-e2e/run.mjs [local|testnet]');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const contracts = resolve(root, process.env.FUUL_CONTRACTS_PATH || '../protocol-contracts-stellar');
-const protocol = process.env.FUUL_E2E_PROTOCOL || '28';
-assert(['27', '28'].includes(protocol), 'FUUL_E2E_PROTOCOL must be 27 or 28');
+let protocol = process.env.FUUL_E2E_PROTOCOL;
+if (target === 'testnet' && !protocol) {
+  const response = await fetch('https://soroban-testnet.stellar.org', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getNetwork' }),
+    signal: AbortSignal.timeout(20_000), redirect: 'error',
+  });
+  assert(response.ok, 'Testnet network lookup failed');
+  const network = (await response.json()).result;
+  assert.equal(network?.passphrase, 'Test SDF Network ; September 2015', 'Unexpected Testnet network');
+  protocol = String(network.protocolVersion);
+}
+protocol ||= '28';
+assert(target === 'local' ? ['27', '28'].includes(protocol)
+  : /^[1-9][0-9]{0,8}$/.test(protocol) && Number(protocol) >= 27,
+  'Local protocols must be 27 or 28; Testnet requires Protocol 27 or later');
 assert.match(execFileSync('stellar', ['--version'], { encoding: 'utf8' }), /^stellar 27\.1\.0 /);
 const provenance = JSON.parse(await readFile(join(root, 'contracts.json'), 'utf8'));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');

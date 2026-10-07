@@ -15,7 +15,7 @@ test("public Manager role meanings encode as the existing Soroban symbols", () =
     ["UNPAUSER_ROLE", "unpauser"], ["CLAIM_SIGNER_ROLE", "claim_signer"],
   ] as const) {
     const args = client.spec.funcArgsToScVals("grant_role", { role: roles[meaning], account, caller: account });
-    expect(args[0]!.switch().name).toBe("scvSymbol");
+    expect(args[0]!.type).toBe("scvSymbol");
     expect(scValToNative(args[0]!)).toBe(symbol);
   }
   expect(Object.keys(roles)).toHaveLength(4);

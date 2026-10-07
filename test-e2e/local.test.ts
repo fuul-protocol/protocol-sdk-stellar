@@ -4,15 +4,16 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { Address, Asset, Contract, Keypair, Operation, StrKey, TransactionBuilder, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction, type SignAuthEntry } from "@stellar/stellar-sdk/contract";
 import { Api, Server, assembleTransaction } from "@stellar/stellar-sdk/rpc";
-import { createFuulRpcServer } from "../dist/esm/index.js";
+import { createFuulRpcServer } from "@fuul/sdk-stellar";
 import { protocol, networkPassphrase, rpcUrl, evidenceTag, allowHttp, fundTestAccount, guardNetwork } from "./network.js";
+import { arm } from "../test/fixtures/xdr.js";
 import {
   FuulSdk, FuulError, TransactionExecutor, keypairSigner, submitSignedTransaction, readContract,
   FactoryContract, ManagerContract,
   currencyType, claimReason, createClaimCheck, randomClaimProof, claimAuthorizations, type ExpectedAuthorization,
   calculateFee, getEventPage, watchEvents,
   FuulActions, getContractState, verifyDeployment, prepareLifecycleTransaction, signPreparedTransaction,
-} from "../dist/esm/index.js";
+} from "@fuul/sdk-stellar";
 
 const rpc = createFuulRpcServer(rpcUrl, { allowHttp });
 // Disposable test keys stay in memory. Neither mode accepts an arbitrary RPC URL or Mainnet passphrase.
@@ -44,7 +45,7 @@ async function classic(key: Keypair, operations: xdr.Operation[]) {
   operations.forEach(op => builder.addOperation(op));
   const transaction = builder.build(); transaction.sign(key);
   const result = await submitSignedTransaction(rpc, transaction, { pollIntervalMs: 250 });
-  records.push({ name: "create FUUL trustline", hash: transaction.hash().toString("hex"), ledger: result.ledger });
+  records.push({ name: "create FUUL trustline", hash: Buffer.from(transaction.hash()).toString("hex"), ledger: result.ledger });
 }
 async function operation(name: string, op: xdr.Operation, key = admin) {
   const unsigned = new TransactionBuilder(await rpc.getAccount(key.publicKey()), { networkPassphrase, fee: "100" }).addOperation(op).setTimeout(60).build();
@@ -54,7 +55,7 @@ async function operation(name: string, op: xdr.Operation, key = admin) {
   expect(BigInt(transaction.fee)).toBeLessThanOrEqual(1_000_000_000n);
   transaction.sign(key);
   const result = await submitSignedTransaction(rpc, transaction, { pollIntervalMs: 250 });
-  records.push({ name, hash: transaction.hash().toString("hex"), ledger: result.ledger });
+  records.push({ name, hash: Buffer.from(transaction.hash()).toString("hex"), ledger: result.ledger });
   return result.returnValue ? scValToNative(result.returnValue) : undefined;
 }
 
@@ -274,36 +275,36 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
     const codeKey = xdr.LedgerKey.contractCode(new xdr.LedgerKeyContractCode({ hash: Buffer.from(before.wasmHash!, "hex") }));
     const targets = [before.instanceKey, codeKey];
     const transaction = await prepareLifecycleTransaction(rpc, { source: address, networkPassphrase, keys: targets, action: { kind: "extend", extendTo: 1_600_000 }, maxFeeStroops: 1_000_000_000n });
-    const footprint = transaction.toEnvelope().v1().tx().ext().sorobanData().resources().footprint();
-    expect(footprint.readOnly().map(key => key.toXDR("base64")).sort()).toEqual(targets.map(key => key.toXDR("base64")).sort());
-    expect(footprint.readWrite()).toHaveLength(0);
+    const footprint = arm(arm(transaction.toEnvelope(), "envelopeTypeTx").v1.tx.ext, "sorobanData").sorobanData.resources.footprint;
+    expect(footprint.readOnly.map(key => key.toXdr("base64")).sort()).toEqual(targets.map(key => key.toXdr("base64")).sort());
+    expect(footprint.readWrite).toHaveLength(0);
     const confirmed = await submitSignedTransaction(rpc, await signPreparedTransaction(transaction, signer, 1_000_000_000n), { pollIntervalMs: 250 });
-    records.push({ name: "extend project TTL", hash: transaction.hash().toString("hex"), ledger: confirmed.ledger });
+    records.push({ name: "extend project TTL", hash: Buffer.from(transaction.hash()).toString("hex"), ledger: confirmed.ledger });
     expect((await getContractState(rpc, projectId)).liveUntilLedger!).toBeGreaterThan(before.liveUntilLedger!);
   });
 
   test("extends temporary and persistent values with one exact mixed footprint", async () => {
     const contractId = adapters.storage!; const symbol = xdr.ScVal.scvSymbol("shared");
     await send("write temporary and persistent storage fixture", () => fixtureCall(contractId, "set_entries", [symbol, xdr.ScVal.scvU32(111), xdr.ScVal.scvU32(222)]));
-    const keys = [xdr.ContractDataDurability.temporary(), xdr.ContractDataDurability.persistent()].map(durability => xdr.LedgerKey.contractData(new xdr.LedgerKeyContractData({
+    const keys = [xdr.ContractDataDurability.temporary, xdr.ContractDataDurability.persistent].map(durability => xdr.LedgerKey.contractData(new xdr.LedgerKeyContractData({
       contract: new Address(contractId).toScAddress(), key: symbol, durability,
     })));
     const before = await rpc.getLedgerEntries(...keys); expect(before.entries).toHaveLength(2);
     const snapshot = (response: Awaited<ReturnType<Server["getLedgerEntries"]>>) => keys.map(key => {
-      const row = response.entries.find(row => row.key.toXDR("base64") === key.toXDR("base64"));
+      const row = response.entries.find(row => row.key.toXdr("base64") === key.toXdr("base64"));
       if (!row || row.liveUntilLedgerSeq === undefined) throw new Error("Missing storage fixture observation");
-      return { keyXdr: row.key.toXDR("base64"), durability: row.key.contractData().durability().name,
-        valueXdr: row.val.toXDR("base64"), liveUntilLedger: row.liveUntilLedgerSeq, lastModifiedLedger: row.lastModifiedLedgerSeq };
+      return { keyXdr: row.key.toXdr("base64"), durability: arm(row.key, "contractData").contractData.durability.name,
+        valueXdr: row.val.toXdr("base64"), liveUntilLedger: row.liveUntilLedgerSeq, lastModifiedLedger: row.lastModifiedLedgerSeq };
     });
     const beforeEntries = snapshot(before);
     const transaction = await prepareLifecycleTransaction(rpc, { source: address, networkPassphrase, keys,
       action: { kind: "extend", extendTo: 1_600_000 }, maxFeeStroops: 1_000_000_000n });
-    const footprint = transaction.toEnvelope().v1().tx().ext().sorobanData().resources().footprint();
-    expect(footprint.readOnly().map(key => key.toXDR("base64")).sort()).toEqual(keys.map(key => key.toXDR("base64")).sort());
-    expect(footprint.readWrite()).toHaveLength(0);
+    const footprint = arm(arm(transaction.toEnvelope(), "envelopeTypeTx").v1.tx.ext, "sorobanData").sorobanData.resources.footprint;
+    expect(footprint.readOnly.map(key => key.toXdr("base64")).sort()).toEqual(keys.map(key => key.toXdr("base64")).sort());
+    expect(footprint.readWrite).toHaveLength(0);
     const signed = await signPreparedTransaction(transaction, signer, 1_000_000_000n);
     const confirmed = await submitSignedTransaction(rpc, signed, { pollIntervalMs: 250 });
-    const hash = signed.hash().toString("hex");
+    const hash = Buffer.from(signed.hash()).toString("hex");
     records.push({ name: "extend temporary and persistent storage entries", hash, ledger: confirmed.ledger });
     const after = await rpc.getLedgerEntries(...keys); const afterEntries = snapshot(after);
     for (const [index, entry] of afterEntries.entries()) {
@@ -336,10 +337,10 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
     const feeBump = TransactionBuilder.buildFeeBumpTransaction(collector.publicKey(), "200", signedInner, networkPassphrase);
     const signed = await signPreparedTransaction(feeBump, keypairSigner(collector), 1_000_000_000n);
     const confirmed = await submitSignedTransaction(rpc, signed, { pollIntervalMs: 250 });
-    records.push({ name: "sponsored token transfer", hash: signed.hash().toString("hex"), ledger: confirmed.ledger });
+    records.push({ name: "sponsored token transfer", hash: Buffer.from(signed.hash()).toString("hex"), ledger: confirmed.ledger });
     expect((await sdk.token(currency).balance(recipient.publicKey())).result - beforeRecipient).toBe(1_000_000n);
     expect((await sdk.token(native).balance(address)).result).toBe(beforeSource);
-    expect(beforePayer - (await sdk.token(native).balance(collector.publicKey())).result).toBe(BigInt(confirmed.resultXdr.feeCharged().toString()));
+    expect(beforePayer - (await sdk.token(native).balance(collector.publicKey())).result).toBe(BigInt(confirmed.resultXdr.feeCharged.toString()));
   });
   test("recovers an accepted transfer after a lost response without submitting twice", async () => {
     const before = (await sdk.token(currency).balance(recipient.publicKey())).result;
@@ -392,7 +393,7 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
     const beforeRecipient = (await sdk.token(currency).balance(recipient.publicKey())).result;
     const beforeCollector = (await sdk.token(currency).balance(collector.publicKey())).result;
     const call = await sdk.token(currency).transfer({ from: recipient.publicKey(), to: collector.publicKey(), amount: 1n });
-    const originalBody = call.toXDR();
+    const originalBody = call.toXdr();
     const authorize = keypairSigner(recipient).signAuthEntry as SignAuthEntry;
     let authorizationCalls = 0;
     const isolated = new TransactionExecutor({ rpc, networkPassphrase, signer, maxFeeStroops: 1_000_000_000n,
@@ -408,7 +409,7 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
     const receipt = await isolated.execute(() => Promise.resolve(call), { pollIntervalMs: 250, timeoutMs: 30_000 });
     records.push({ name: "transfer isolated from application authorization mutation", hash: receipt.hash, ledger: receipt.ledger });
     expect(authorizationCalls).toBe(1);
-    expect(call.toXDR()).not.toBe(originalBody);
+    expect(call.toXdr()).not.toBe(originalBody);
     expect((await sdk.token(currency).balance(recipient.publicKey())).result).toBe(beforeRecipient - 1n);
     expect((await sdk.token(currency).balance(collector.publicKey())).result).toBe(beforeCollector + 1n);
   });
@@ -490,8 +491,8 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
     const instance = async (id: string) => {
       const entries = await rpc.getLedgerEntries(new Contract(id).getFootprint());
       expect(entries.entries).toHaveLength(1);
-      const value = entries.entries[0]!.val.contractData().val().instance();
-      return { hash: value.executable().wasmHash(), storageXdr: xdr.ScVal.scvMap(value.storage()).toXDR("base64") };
+      const value = arm(arm(entries.entries[0]!.val, "contractData").contractData.val, "scvContractInstance").instance;
+      return { hash: arm(value.executable, "contractExecutableWasm").wasmHash.toBytes(), storageXdr: xdr.ScVal.scvMap(value.storage).toXdr("base64") };
     };
     const balances = () => Promise.all([
       readContract(sdk.token(currency).balance(projectId)),
@@ -515,7 +516,7 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
       expect(createHash("sha256").update(wasm).digest("hex")).toBe(artifact.wasmSha256);
       expect(Buffer.from(await operation(`upload ${name} upgrade fixture`, Operation.uploadContractWasm({ wasm }))).toString("hex")).toBe(artifact.wasmSha256);
       const original = await instance(client.options.contractId);
-      expect(original.hash.toString("hex")).toBe(artifact.previousWasmSha256);
+      expect(Buffer.from(original.hash).toString("hex")).toBe(artifact.previousWasmSha256);
       const args = { new_wasm_hash: Buffer.from(artifact.wasmSha256, "hex"), operator: address };
       const sequence = (await rpc.getAccount(address)).sequenceNumber();
       // Manager and Factory check their own role (OpenZeppelin 2000); a Project checks the Factory role (Project 6101).
@@ -525,17 +526,17 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
       await send(`upgrade ${name}`, () => client.upgrade(args));
       const record = records.at(-1)!;
       const changed = await instance(client.options.contractId);
-      expect(changed.hash.toString("hex")).toBe(artifact.wasmSha256);
+      expect(Buffer.from(changed.hash).toString("hex")).toBe(artifact.wasmSha256);
       expect(changed.storageXdr).toBe(original.storageXdr);
       const included = await rpc.getTransaction(record.hash);
       expect(included.status).toBe(Api.GetTransactionStatus.SUCCESS);
       if (included.status !== Api.GetTransactionStatus.SUCCESS) throw new Error("Upgrade was not included successfully");
       const events = included.events.contractEventsXdr.flat()
         .filter(event => {
-          const hash = event.contractId();
-          return hash instanceof Uint8Array && Buffer.from(hash).equals(StrKey.decodeContract(client.options.contractId));
+          const hash = event.contractId?.toBytes();
+          return hash !== undefined && Buffer.from(hash).equals(StrKey.decodeContract(client.options.contractId));
         })
-        .map(event => ({ topics: event.body().v0().topics().map(scValToNative), data: scValToNative(event.body().v0().data()) }));
+        .map(event => ({ topics: event.body.v0.topics.map(scValToNative), data: scValToNative(event.body.v0.data) }));
       expect(events).toEqual([
         { topics: ["executable_update", ["Wasm", original.hash], ["Wasm", changed.hash]], data: [] },
         { topics: ["contract_upgraded"], data: { operator: address, new_wasm_hash: changed.hash } },
@@ -549,8 +550,8 @@ describe(`SDK network workflows (${evidenceTag})`, () => {
       await expect(send("repeated migration must fail", () => fixtureCall(client.options.contractId, "migrate_fixture", [new Address(address).toScVal()])))
         .rejects.toMatchObject({ code: "CONTRACT_ERROR", details: { contractCode: 6900 } });
       expect(await state()).toEqual(before);
-      transitions.push({ name, contractId: client.options.contractId, previousWasm: original.hash.toString("hex"),
-        newWasm: changed.hash.toString("hex"), upgrade: record.hash, ledger: record.ledger });
+      transitions.push({ name, contractId: client.options.contractId, previousWasm: Buffer.from(original.hash).toString("hex"),
+        newWasm: Buffer.from(changed.hash).toString("hex"), upgrade: record.hash, ledger: record.ledger });
     }
     await send("unpause after contract upgrades", () => sdk.manager.unpause({ caller: address }));
     const beforeNext = await balances();

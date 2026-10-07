@@ -1,16 +1,9 @@
 {
   "name": "@fuul/sdk-stellar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Typed SDK for the Fuul protocol on Stellar",
   "type": "module",
   "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/fuul-protocol/protocol-sdk-stellar.git"
-  },
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.js",
-  "types": "./dist/cjs/index.d.ts",
   "files": [
     "dist",
     "README.md",
@@ -125,10 +118,13 @@
     "build": "node scripts/build.mjs",
     "test": "bun test ./test/",
     "typecheck": "tsc -p tsconfig.check.json",
-    "test:e2e": "node test-e2e/run.mjs"
+    "test:e2e": "node test-e2e/run.mjs",
+    "test:package": "node test/package.mjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test && npm run test:package"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "16.3.0",
+    "@stellar/stellar-sdk": "17.2.1",
     "@types/json-schema": "7.0.15",
     "@types/node": "22.19.17",
     "buffer": "6.0.3"
@@ -138,13 +134,23 @@
     "typescript": "5.9.3"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   },
   "license": "ISC",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "latest",
+    "registry": "https://registry.npmjs.org/"
   },
-  "overrides": {
-    "uuid": "11.1.1"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fuul-protocol/protocol-sdk-stellar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fuul-protocol/protocol-sdk-stellar/issues"
+  },
+  "homepage": "https://github.com/fuul-protocol/protocol-sdk-stellar#readme",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts"
 }

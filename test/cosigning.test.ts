@@ -1,3 +1,4 @@
+import { arm } from "./fixtures/xdr.js";
 import { expect, spyOn, test } from "bun:test";
 import { Account, Asset, FeeBumpTransaction, Keypair, Memo, Networks, Operation, Transaction, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
 import { cosignPreparedTransaction, keypairSigner, signPreparedTransaction, type CosignOptions, type FuulSigner } from "../src/index.js";
@@ -14,24 +15,24 @@ function prepared() {
     .setTimeout(300).build();
 }
 function review(tx: Transaction | FeeBumpTransaction): CosignOptions {
-  return { expectedSource: tx instanceof FeeBumpTransaction ? tx.feeSource : tx.source, expectedHash: tx.hash().toString("hex"), maxFeeStroops: 10_000n };
+  return { expectedSource: tx instanceof FeeBumpTransaction ? tx.feeSource : tx.source, expectedHash: Buffer.from(tx.hash()).toString("hex"), maxFeeStroops: 10_000n };
 }
 function wallet(change: (tx: Transaction | FeeBumpTransaction) => Transaction | FeeBumpTransaction, key = first): FuulSigner {
   return { address: key.publicKey(), async signTransaction(encoded, options) {
-    const tx = change(TransactionBuilder.fromXDR(encoded, options!.networkPassphrase!));
-    return { signedTxXdr: tx.toXDR(), signerAddress: key.publicKey() };
+    const tx = change(TransactionBuilder.fromXdr(encoded, options!.networkPassphrase!));
+    return { signedTxXdr: tx.toXdr(), signerAddress: key.publicKey() };
   } };
 }
 
 test("two account cosigners sign the same reviewed body without changing caller-owned envelopes", async () => {
-  const tx = prepared(); const original = tx.toXDR(); const reviewed = review(tx);
+  const tx = prepared(); const original = tx.toXdr(); const reviewed = review(tx);
   const one = await cosignPreparedTransaction(tx, keypairSigner(first), reviewed);
-  const snapshot = one.toXDR(); const two = await cosignPreparedTransaction(one, keypairSigner(second), reviewed);
-  expect(tx.toXDR()).toBe(original); expect(one.toXDR()).toBe(snapshot);
+  const snapshot = one.toXdr(); const two = await cosignPreparedTransaction(one, keypairSigner(second), reviewed);
+  expect(tx.toXdr()).toBe(original); expect(one.toXdr()).toBe(snapshot);
   expect(one.signatures).toHaveLength(1); expect(two.signatures).toHaveLength(2);
-  expect(two.source).toBe(source.publicKey()); expect(two.hash().toString("hex")).toBe(reviewed.expectedHash);
-  expect(first.verify(two.hash(), two.signatures[0]!.signature())).toBe(true);
-  expect(second.verify(two.hash(), two.signatures[1]!.signature())).toBe(true);
+  expect(two.source).toBe(source.publicKey()); expect(Buffer.from(two.hash()).toString("hex")).toBe(reviewed.expectedHash);
+  expect(first.verify(two.hash(), two.signatures[0]!.signature.toBytes())).toBe(true);
+  expect(second.verify(two.hash(), two.signatures[1]!.signature.toBytes())).toBe(true);
   await expect(signPreparedTransaction(tx, keypairSigner(first), reviewed.maxFeeStroops)).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
 });
 
@@ -42,7 +43,7 @@ test("the wallet receives the selected cosigner, network, reviewed XDR and submi
     get address() { return first.publicKey(); }
     async signTransaction(...args: Parameters<FuulSigner["signTransaction"]>) {
       calls++;
-      expect(args[0]).toBe(tx.toXDR());
+      expect(args[0]).toBe(tx.toXdr());
       expect(args[1]).toEqual({ networkPassphrase, address: first.publicKey(), submit: false });
       return this.#signer.signTransaction(...args);
     }
@@ -58,9 +59,9 @@ test("source, hash, network, fee and expiry mismatches stop before wallet intera
     { ...options, expectedSource: first.publicKey() }, { ...options, expectedHash: "00".repeat(32) },
     { ...options, expectedHash: options.expectedHash.toUpperCase() }, { ...options, maxFeeStroops: 99n }, { ...options, maxFeeStroops: 0n },
   ]) await expect(cosignPreparedTransaction(tx, signer, altered)).rejects.toThrow();
-  const networkChanged = new Transaction(tx.toXDR(), Networks.TESTNET);
+  const networkChanged = new Transaction(tx.toXdr(), Networks.TESTNET);
   await expect(cosignPreparedTransaction(networkChanged, signer, options)).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
-  const envelope = tx.toEnvelope(); envelope.v1().tx().cond().timeBounds().maxTime(xdr.Uint64.fromString("1"));
+  const envelope = tx.toEnvelope(); Reflect.set(arm(arm(envelope, "envelopeTypeTx").v1.tx.cond, "precondTime").timeBounds, "maxTime", xdr.Uint64.fromString("1"));
   const expired = new Transaction(envelope, networkPassphrase);
   await expect(cosignPreparedTransaction(expired, signer, review(expired))).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
   expect(calls).toBe(0);
@@ -70,21 +71,21 @@ test("wallet body changes and wrong-network signatures cannot satisfy a reviewed
   const tx = prepared(); const options = review(tx);
   for (const mutate of [
     (value: Transaction | FeeBumpTransaction) => { const changed = TransactionBuilder.cloneFrom(value as Transaction).addMemo(Memo.text("changed")).build(); changed.sign(first); return changed; },
-    (value: Transaction | FeeBumpTransaction) => { const changed = new Transaction(value.toXDR(), Networks.TESTNET); changed.sign(first); return changed; },
+    (value: Transaction | FeeBumpTransaction) => { const changed = new Transaction(value.toXdr(), Networks.TESTNET); changed.sign(first); return changed; },
   ]) await expect(cosignPreparedTransaction(tx, wallet(mutate), options)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
 });
 
 test("a wallet cannot substitute a legacy envelope even when its transaction hash matches", async () => {
   const tx = prepared();
-  const v1 = tx.toEnvelope().v1().tx();
+  const v1 = arm(tx.toEnvelope(), "envelopeTypeTx").v1.tx;
   const legacy = new Transaction(xdr.TransactionEnvelope.envelopeTypeTxV0(new xdr.TransactionV0Envelope({
-    tx: new xdr.TransactionV0({ sourceAccountEd25519: source.rawPublicKey(), fee: v1.fee(), seqNum: v1.seqNum(),
-      timeBounds: v1.cond().timeBounds(), memo: v1.memo(), operations: v1.operations(), ext: new xdr.TransactionV0Ext(0) }),
+    tx: new xdr.TransactionV0({ sourceAccountEd25519: source.rawPublicKey(), fee: v1.fee, seqNum: v1.seqNum,
+      timeBounds: arm(v1.cond, "precondTime").timeBounds, memo: v1.memo, operations: v1.operations, ext: xdr.TransactionV0Ext.v0() }),
     signatures: [],
   })), networkPassphrase);
   legacy.sign(first);
-  expect(legacy.hash().equals(tx.hash())).toBe(true);
-  expect(first.verify(tx.hash(), legacy.signatures[0]!.signature())).toBe(true);
+  expect(Buffer.from(legacy.hash()).equals(tx.hash())).toBe(true);
+  expect(first.verify(tx.hash(), legacy.signatures[0]!.signature.toBytes())).toBe(true);
   await expect(cosignPreparedTransaction(tx, wallet(() => legacy), review(tx))).rejects.toMatchObject({ code: "WALLET_MUTATION" });
 });
 
@@ -94,8 +95,8 @@ test("wallets must append exactly one valid signature from the selected key", as
     (value: Transaction | FeeBumpTransaction) => value,
     (value: Transaction | FeeBumpTransaction) => { value.sign(second); return value; },
     (value: Transaction | FeeBumpTransaction) => { value.sign(first, first); return value; },
-    (value: Transaction | FeeBumpTransaction) => { value.sign(first); value.signatures[0]!.signature(Buffer.alloc(64)); return value; },
-    (value: Transaction | FeeBumpTransaction) => { value.sign(first); value.signatures[0]!.hint(Buffer.alloc(4)); return value; },
+    (value: Transaction | FeeBumpTransaction) => { value.sign(first); Reflect.set(value.signatures[0]!, "signature", new xdr.Signature(Buffer.alloc(64))); return value; },
+    (value: Transaction | FeeBumpTransaction) => { value.sign(first); Reflect.set(value.signatures[0]!, "hint", new xdr.SignatureHint(Buffer.alloc(4))); return value; },
   ]) await expect(cosignPreparedTransaction(tx, wallet(alter), review(tx))).rejects.toMatchObject({ code: "WALLET_MUTATION" });
 });
 
@@ -116,14 +117,14 @@ test("an existing valid signature from this cosigner is rejected without another
 });
 
 test("a fee source can collect multiple signatures while retaining its signed inner transaction", async () => {
-  const inner = prepared(); inner.sign(source); const innerXdr = inner.toXDR();
+  const inner = prepared(); inner.sign(source); const innerXdr = inner.toXdr();
   const feeBump = TransactionBuilder.buildFeeBumpTransaction(destination.publicKey(), "200", inner, networkPassphrase);
   const one = await cosignPreparedTransaction(feeBump, keypairSigner(first), review(feeBump));
   const two = await cosignPreparedTransaction(one, keypairSigner(second), review(feeBump));
-  expect(two).toBeInstanceOf(FeeBumpTransaction); expect(two.innerTransaction.toXDR()).toBe(innerXdr);
+  expect(two).toBeInstanceOf(FeeBumpTransaction); expect(two.innerTransaction.toXdr()).toBe(innerXdr);
   expect(two.feeSource).toBe(destination.publicKey()); expect(two.signatures).toHaveLength(2);
-  expect(first.verify(two.hash(), two.signatures[0]!.signature())).toBe(true);
-  expect(second.verify(two.hash(), two.signatures[1]!.signature())).toBe(true);
+  expect(first.verify(two.hash(), two.signatures[0]!.signature.toBytes())).toBe(true);
+  expect(second.verify(two.hash(), two.signatures[1]!.signature.toBytes())).toBe(true);
   const unsignedInner = TransactionBuilder.buildFeeBumpTransaction(destination.publicKey(), "200", prepared(), networkPassphrase);
   await expect(cosignPreparedTransaction(unsignedInner, keypairSigner(first), review(unsignedInner))).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
 });
@@ -141,25 +142,25 @@ test("cancellation settles while a wallet waits and rejects its late signature",
 });
 
 test("review options, caller envelope and signer fields are snapshotted before wallet wait", async () => {
-  const tx = prepared(); const original = tx.toXDR(); const options = review(tx);
+  const tx = prepared(); const original = tx.toXdr(); const options = review(tx);
   const signer: FuulSigner = { address: first.publicKey(), async signTransaction(encoded, parameters) {
     options.expectedHash = "00".repeat(32); options.expectedSource = second.publicKey(); options.maxFeeStroops = 1n;
     tx.sign(second); signer.address = second.publicKey();
-    const value = TransactionBuilder.fromXDR(encoded, parameters!.networkPassphrase!); value.sign(first);
-    return { signedTxXdr: value.toXDR(), signerAddress: first.publicKey() };
+    const value = TransactionBuilder.fromXdr(encoded, parameters!.networkPassphrase!); value.sign(first);
+    return { signedTxXdr: value.toXdr(), signerAddress: first.publicKey() };
   } };
   const signed = await cosignPreparedTransaction(tx, signer, options);
-  expect(signed.hash().equals(new Transaction(original, networkPassphrase).hash())).toBe(true);
-  expect(signed.signatures).toHaveLength(1); expect(first.verify(signed.hash(), signed.signatures[0]!.signature())).toBe(true);
+  expect(Buffer.from(signed.hash()).equals(new Transaction(original, networkPassphrase).hash())).toBe(true);
+  expect(signed.signatures).toHaveLength(1); expect(first.verify(signed.hash(), signed.signatures[0]!.signature.toBytes())).toBe(true);
 });
 
 test("malformed wallet envelopes and wrong signer identity are rejected", async () => {
   const tx = prepared();
   for (const response of [
     { signedTxXdr: "invalid", signerAddress: first.publicKey() },
-    { signedTxXdr: tx.toXDR() + "\n", signerAddress: first.publicKey() },
+    { signedTxXdr: tx.toXdr() + "\n", signerAddress: first.publicKey() },
     { signedTxXdr: "A".repeat(2 * 1024 * 1024 + 1), signerAddress: first.publicKey() },
-    { signedTxXdr: tx.toXDR(), signerAddress: second.publicKey() },
+    { signedTxXdr: tx.toXdr(), signerAddress: second.publicKey() },
   ]) await expect(cosignPreparedTransaction(tx, { address: first.publicKey(), async signTransaction() { return response; } }, review(tx))).rejects.toMatchObject({ code: "WALLET_MUTATION" });
   await expect(cosignPreparedTransaction(tx, { address: first.publicKey(), async signTransaction() { return { signedTxXdr: "", error: { message: "declined", code: -1 } }; } }, review(tx))).rejects.toMatchObject({ code: "WALLET_REJECTED" });
 });

@@ -6,7 +6,7 @@ Disposable keys remain in memory. The suites support a local network and public 
 
 ## Prepare
 
-Use Node.js 22 or 24, Bun 1.3.12, Rust 1.92.0, and Stellar CLI 27.1.0.
+Use Node.js 22.12 or later, Bun 1.3.12, Rust 1.92.0, and Stellar CLI 27.1.0.
 For local tests, start Docker with Compose.
 Clone the contracts repository beside this repository as `protocol-contracts-stellar`.
 Use the contracts commit from `contracts.json`. Set `FUUL_CONTRACTS_PATH` if its location differs.
@@ -37,6 +37,7 @@ bun run test:e2e testnet
 ```
 
 The suite verifies the network passphrase and protocol before funding or contract execution.
+The runner reads Testnet's current protocol unless `FUUL_E2E_PROTOCOL` specifies the expected version.
 It rejects Mainnet and arbitrary RPC endpoints. It does not load production keys.
 Some instances undergo upgrades to test-only replacements. These instances are not application deployments.
 Use the separate deployment guide for a retained deployment and video demonstration.
@@ -52,4 +53,4 @@ The delivery repositories each start with one commit. The recorded contracts com
 Transfer both repositories together so that this commit remains available.
 By default, the contracts repository is `<owner>/protocol-contracts-stellar`.
 Set the `CONTRACTS_REPOSITORY` repository variable if its name differs.
-For a private contracts repository, provide a read-only `CONTRACTS_READ_TOKEN` secret with access to that repository.
+For a private contracts repository, provide a read-only `CONTRACTS_DEPLOY_KEY` SSH key with access to that repository.

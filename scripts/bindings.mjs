@@ -10,6 +10,8 @@ const [mode, argument, ...extra] = process.argv.slice(2);
 assert(['generate', 'verify'].includes(mode) && argument && !extra.length,
   'Usage: node scripts/bindings.mjs <generate|verify> <clean-contracts-repository>');
 const root = fileURLToPath(new URL('../', import.meta.url));
+const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const bindingTransform = 'Remove the Buffer global and use Uint8Array byte types for Stellar SDK 17.';
 const port = resolve(argument);
 const names = ['manager', 'factory', 'project'];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -41,6 +43,8 @@ const platform = `${process.platform}-${process.arch}`;
 const previous = mode === 'verify' ? JSON.parse(await readFile(join(root, 'contracts.json'), 'utf8')) : null;
 if (previous) {
   assert.equal(previous.schemaVersion, 2);
+  assert.equal(previous.stellarSdk, pkg.dependencies['@stellar/stellar-sdk']);
+  assert.equal(previous.bindingTransform, bindingTransform);
   assert.equal(previous.source.dirty, false);
   assert.equal(previous.platform, platform, 'Use the recorded build platform for byte verification');
   assert.deepEqual(previous.source.files, source.files, 'Contract source differs from binding provenance');
@@ -57,13 +61,19 @@ try {
   });
   const contracts = {}, bindings = [];
   const bufferGlobal = 'if (typeof window !== "undefined") {\n  //@ts-ignore Buffer exists\n  window.Buffer = window.Buffer || Buffer;\n}\n';
+  const bufferImport = 'import { Buffer } from "buffer";\n';
+  const saltUnion = 'salt?: Uint8Array | Uint8Array;';
   for (const name of names) {
     const wasm = join(target, `wasm32v1-none/release/fuul_${name}.wasm`);
     const output = join(temporary, name);
     execFileSync('stellar', ['contract', 'bindings', 'typescript', '--wasm', wasm, '--output-dir', output], { stdio: 'inherit' });
     const upstream = await readFile(join(output, 'src/index.ts'), 'utf8');
     assert.equal(upstream.split(bufferGlobal).length, 2, 'Review changes in the generator before removing its Buffer global');
-    const binding = upstream.replace(bufferGlobal, '');
+    assert.equal(upstream.split(bufferImport).length, 2, 'Review changes in the generator before removing its Buffer import');
+    const bytes = upstream.replace(bufferGlobal, '').replace(bufferImport, '').replace(/\bBuffer\b/g, 'Uint8Array');
+    assert.equal(bytes.split(saltUnion).length, 2, 'Review changes in the generator before simplifying the salt type');
+    const binding = bytes.replace(saltUnion, 'salt?: Uint8Array;');
+    assert(!/\bBuffer\b/.test(binding), `${name}: the binding must not reference Buffer`);
     const record = { upstreamBindingSha256: sha256(upstream), bindingSha256: sha256(binding), wasmSha256: sha256(await readFile(wasm)) };
     const nameInPackage = `fuul-${name}`;
     contracts[nameInPackage] = record;
@@ -77,7 +87,7 @@ try {
   if (!previous) {
     for (const { path, binding } of bindings) await writeFile(path, binding);
     const provenance = { schemaVersion: 2, sourceRepository: 'https://github.com/fuul-protocol/protocol-contracts-stellar',
-      stellarCli: '27.1.0', stellarSdk: '16.3.0', platform, source, contracts };
+      stellarCli: '27.1.0', stellarSdk: pkg.dependencies['@stellar/stellar-sdk'], bindingTransform, platform, source, contracts };
     await writeFile(join(root, 'contracts.json'), JSON.stringify(provenance, null, 2) + '\n');
   }
   console.log(`${mode}: three bindings and Wasm hashes verified against ${source.commit}`);

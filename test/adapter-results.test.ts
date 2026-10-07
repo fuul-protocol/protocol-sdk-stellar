@@ -6,7 +6,7 @@ import { KycClient, MultiTokenClient, NonFungibleClient, readContract, TokenClie
 const account = Keypair.random().publicKey();
 const contract = StrKey.encodeContract(Buffer.alloc(32, 17));
 function fixture() {
-  let result = xdr.ScVal.scvVoid();
+  let result: xdr.ScVal = xdr.ScVal.scvVoid();
   const server = {
     getAccount: async () => new Account(account, "1"),
     simulateTransaction: async () => ({ id: "test", _parsed: true, latestLedger: 100, events: [], minResourceFee: "1000", transactionData: new SorobanDataBuilder().setResourceFee(1000), result: { auth: [], retval: result } }),

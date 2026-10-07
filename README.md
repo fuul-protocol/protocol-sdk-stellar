@@ -1,24 +1,44 @@
 # Fuul Stellar SDK
 
 TypeScript clients for Fuul projects, funding, claims, administration, events and contract storage.
-Supports Node.js 22 and 24, Bun, and browsers with Web Crypto.
+Supports Node.js 22.12 or later, Node.js 24, Bun, and browsers with Web Crypto.
+The package provides ESM and CommonJS builds.
 
-Ships as ESM and CommonJS builds.
 The [contracts repository](https://github.com/fuul-protocol/protocol-contracts-stellar) contains the Rust contracts.
 [contracts.json](contracts.json) records their source commit, Wasm hashes and generated binding hashes.
 
 ## Install
 
+After Fuul publishes this release, install it from npm:
+
 ```sh
 npm install @fuul/sdk-stellar
 ```
 
-To build from source, use Node.js 22 and Bun 1.3.12:
+To install from source, build with Node.js 22.12 or later and Bun 1.3.12:
 
 ```sh
 bun install --frozen-lockfile
 bun run build
+npm pack
 ```
+
+Install the archive in your application:
+
+```sh
+npm install /path/to/fuul-sdk-stellar-0.3.0.tgz
+```
+
+CommonJS applications can use `require("@fuul/sdk-stellar")`.
+CommonJS TypeScript projects need TypeScript 5.8 or later.
+TypeScript applications use `module: "NodeNext"` and `moduleResolution: "NodeNext"`.
+For ESM, set `type: "module"` in the application package. Otherwise, TypeScript emits CommonJS.
+
+This release uses Stellar JS SDK 17.2.1. Use that version for Stellar transaction and XDR objects in your application.
+Stellar byte results use `Uint8Array`. Existing `Buffer` inputs remain valid.
+`Uint8Array` has no hex encoding: `bytes.toString("hex")` returns comma-separated numbers without an error. Convert explicitly, for example `Buffer.from(bytes).toString("hex")`.
+Decoded event topics and values follow the same rule. A string with invalid UTF-8 decodes to `Uint8Array`.
+External wallets that sign authorization entries must support CAP-71 address credentials, which Stellar SDK 17 records by default.
 
 ## Create a project
 
@@ -62,11 +82,12 @@ The SDK does not store keys or select Mainnet addresses.
 bun run typecheck
 bun test ./test/
 bun run build
-node test/package.mjs
+npm run test:package
 bun audit
 ```
 
-The tests cover SDK behavior and installation in an independent, strict TypeScript consumer.
+The tests cover SDK behavior and installation in independent ESM and CommonJS consumers with strict TypeScript checks.
+The package check also tests signing in a browser bundle without Node globals.
 The [network test guide](https://github.com/fuul-protocol/protocol-sdk-stellar/blob/main/test-e2e/README.md) covers local E2E and an explicit public Testnet run.
 The [deployment guide](https://github.com/fuul-protocol/protocol-contracts-stellar/blob/main/deploy.md) includes a Testnet walkthrough and Mainnet configuration.
 The [SDK example](https://github.com/fuul-protocol/protocol-sdk-stellar/blob/main/examples/demo.mjs) reads state, funds Projects, submits claims and demonstrates pause controls.
@@ -81,19 +102,24 @@ node scripts/bindings.mjs verify ../protocol-contracts-stellar
 
 Both commands rebuild contracts in an isolated directory. Verification uses the recorded build platform and rejects changed sources, bindings or Wasm hashes.
 
-## Publishing to npm
+## Publish
 
-Releases are published manually from `main`; the npm account has 2FA, so publishing needs a one-time password.
+Use an npm account with permission to publish under the `@fuul` scope.
+Run the release checks:
 
 ```sh
-git switch main && git pull
 bun install --frozen-lockfile
-bun run typecheck && bun test ./test/
-npm pkg set version=<version>
-bun run build && node test/package.mjs
-npm publish --dry-run
-npm publish --otp=<code>
+bun run typecheck
+bun test ./test/
+npm run test:package
 ```
 
-Check the version and that the file list contains `dist/esm`, `dist/cjs` and `dist/types` before publishing.
-Then commit the version bump and open a PR against `main`.
+Publish from the repository root so that npm runs the lifecycle hooks:
+
+```sh
+npm publish
+```
+
+The `prepack` hook rebuilds both formats. The `prepublishOnly` hook runs the typecheck, unit tests and package check before upload.
+The package check installs the archive, checks every export, and audits consumer dependencies.
+`publishConfig` sets public access and the `latest` tag.

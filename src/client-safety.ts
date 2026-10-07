@@ -10,11 +10,11 @@ export function assertUnsignedCall(options?: MethodOptions): void {
 /** Validate method options before upstream simulation can start an automatic restore. */
 export function unsignedClient<T extends Client>(client: T): T {
   for (const fn of client.spec.funcs()) {
-    const name = fn.name().toString();
+    const name = fn.name.toString();
     if (name === "__constructor") continue;
     const methods = client as unknown as Record<string, (...args: unknown[]) => unknown>;
     const method = methods[name]!;
-    const optionsIndex = fn.inputs().length ? 1 : 0;
+    const optionsIndex = fn.inputs.length ? 1 : 0;
     methods[name] = (...args: unknown[]) => {
       assertUnsignedCall(client.options);
       assertUnsignedCall(args[optionsIndex] as MethodOptions | undefined);

@@ -1,4 +1,3 @@
-import { Buffer } from "buffer";
 import { Address } from "@stellar/stellar-sdk";
 import {
   AssembledTransaction,
@@ -70,7 +69,7 @@ export interface Client {
   /**
    * Construct and simulate a claim transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  claim: ({manager, to, currency, currency_type, amount, token_id, proof, kyc_registered}: {manager: string, to: string, currency: string, currency_type: TokenType, amount: i128, token_id: u256, proof: Buffer, kyc_registered: boolean}, options?: MethodOptions) => Promise<AssembledTransaction<ProjectClaimResult>>
+  claim: ({manager, to, currency, currency_type, amount, token_id, proof, kyc_registered}: {manager: string, to: string, currency: string, currency_type: TokenType, amount: i128, token_id: u256, proof: Uint8Array, kyc_registered: boolean}, options?: MethodOptions) => Promise<AssembledTransaction<ProjectClaimResult>>
 
   /**
    * Construct and simulate a factory transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -81,7 +80,7 @@ export interface Client {
    * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Upgrades Project code with Factory administrator authorization.
    */
-  upgrade: ({new_wasm_hash, operator}: {new_wasm_hash: Buffer, operator: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  upgrade: ({new_wasm_hash, operator}: {new_wasm_hash: Uint8Array, operator: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a has_role transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -121,7 +120,7 @@ export interface Client {
   /**
    * Construct and simulate a claimed_proofs transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  claimed_proofs: ({proof}: {proof: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<boolean>>
+  claimed_proofs: ({proof}: {proof: Uint8Array}, options?: MethodOptions) => Promise<AssembledTransaction<boolean>>
 
   /**
    * Construct and simulate a get_role_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -172,9 +171,9 @@ export class Client extends ContractClient {
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
         /** The hash of the Wasm blob, which must already be installed on-chain. */
-        wasmHash: Buffer | string;
+        wasmHash: Uint8Array | string;
         /** Salt used to generate the contract's ID. Passed through to {@link Operation.createCustomContract}. Default: random. */
-        salt?: Buffer | Uint8Array;
+        salt?: Uint8Array;
         /** The format used to decode `wasmHash`, if it's provided as a string. */
         format?: "hex" | "base64";
       }
