@@ -1,6 +1,6 @@
 {
   "name": "@fuul/sdk-stellar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Typed SDK for the Fuul protocol on Stellar",
   "type": "module",
   "sideEffects": false,
@@ -139,6 +139,7 @@
   "license": "ISC",
   "publishConfig": {
     "access": "public",
+    "tag": "latest",
     "registry": "https://registry.npmjs.org/"
   },
   "repository": {

@@ -9,6 +9,8 @@ The [contracts repository](https://github.com/fuul-protocol/protocol-contracts-s
 
 ## Install
 
+After Fuul publishes this release, install it from npm:
+
 ```sh
 npm install @fuul/sdk-stellar
 ```
@@ -19,6 +21,12 @@ To install from source, build with Node.js 22.12 or later and Bun 1.3.12:
 bun install --frozen-lockfile
 bun run build
 npm pack
+```
+
+Install the archive in your application:
+
+```sh
+npm install /path/to/fuul-sdk-stellar-0.3.0.tgz
 ```
 
 CommonJS applications can use `require("@fuul/sdk-stellar")`.
@@ -94,18 +102,24 @@ node scripts/bindings.mjs verify ../protocol-contracts-stellar
 
 Both commands rebuild contracts in an isolated directory. Verification uses the recorded build platform and rejects changed sources, bindings or Wasm hashes.
 
-## Publishing to npm
+## Publish
 
-Releases are published manually from `main`; the npm account has 2FA, so publishing needs a one-time password.
+Use an npm account with permission to publish under the `@fuul` scope.
+Run the release checks:
 
 ```sh
-git switch main && git pull
 bun install --frozen-lockfile
-bun run typecheck && bun test ./test/
-npm pkg set version=<version>
-bun run build && node test/package.mjs
-npm publish --dry-run
-npm publish --otp=<code>
+bun run typecheck
+bun test ./test/
+npm run test:package
 ```
 
-Then commit the version bump and open a PR against `main`.
+Publish from the repository root so that npm runs the lifecycle hooks:
+
+```sh
+npm publish
+```
+
+The `prepack` hook rebuilds both formats. The `prepublishOnly` hook runs the typecheck, unit tests and package check before upload.
+The package check installs the archive, checks every export, and audits consumer dependencies.
+`publishConfig` sets public access and the `latest` tag.

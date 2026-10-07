@@ -11,6 +11,7 @@ try {
 const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
 assert.notEqual(pkg.private, true, 'The npm release must be publishable');
 assert.equal(pkg.publishConfig.access, 'public');
+assert.equal(pkg.publishConfig.tag, pkg.version.includes('-') ? 'next' : 'latest');
 // A publish dry run still needs a real local archive and consumer install.
 const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run=false', '--json', '--pack-destination', temporary], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0];
 const files = packed.files.map(file => file.path);
