@@ -53,4 +53,4 @@ The delivery repositories each start with one commit. The recorded contracts com
 Transfer both repositories together so that this commit remains available.
 By default, the contracts repository is `<owner>/protocol-contracts-stellar`.
 Set the `CONTRACTS_REPOSITORY` repository variable if its name differs.
-For a private contracts repository, provide a read-only `CONTRACTS_READ_TOKEN` secret with access to that repository.
+For a private contracts repository, provide a read-only `CONTRACTS_DEPLOY_KEY` SSH key with access to that repository.
