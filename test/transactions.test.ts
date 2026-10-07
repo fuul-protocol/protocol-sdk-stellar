@@ -1,3 +1,4 @@
+import { arm } from "./fixtures/xdr.js";
 import { describe, expect, spyOn, test } from "bun:test";
 import { Account, Address, buildAuthorizationEntryPreimage, buildWithDelegatesEntry, Contract, hash, inspectAuthEntry, Keypair, Networks, SorobanDataBuilder, StrKey, Transaction, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
 import { AssembledTransaction, type SignAuthEntry } from "@stellar/stellar-sdk/contract";
@@ -23,12 +24,12 @@ function fixture() {
       minResourceFee: "1000", transactionData: new SorobanDataBuilder().setResources(10000, 0, 0).setResourceFee(1000),
       result: { auth: [], retval: xdr.ScVal.scvU32(42) }, events: [],
     }; },
-    async sendTransaction(tx: { hash(): Buffer; sequence?: string; toEnvelope(): xdr.TransactionEnvelope }) { sends++; if (tx.sequence !== undefined) sequence = Number(tx.sequence); hash = tx.hash().toString("hex"); envelope = tx.toEnvelope(); return { status: "PENDING", hash }; },
+    async sendTransaction(tx: { hash(): Uint8Array; sequence?: string; toEnvelope(): xdr.TransactionEnvelope }) { sends++; if (tx.sequence !== undefined) sequence = Number(tx.sequence); hash = Buffer.from(tx.hash()).toString("hex"); envelope = tx.toEnvelope(); return { status: "PENDING", hash }; },
     // Like the real RPC, a confirmed observation carries the included envelope.
     async getTransaction(requested: string) { return { status: Api.GetTransactionStatus.SUCCESS, txHash: requested, ledger: 102, envelopeXdr: envelope, returnValue: xdr.ScVal.scvU32(43) }; },
   };
   const server = rpc as unknown as Server;
-  const build = () => AssembledTransaction.build<number>({ publicKey: key.publicKey(), rpcUrl: "http://localhost/rpc", allowHttp: true, server, networkPassphrase, contractId, method: "answer", parseResultXdr: val => val.u32() });
+  const build = () => AssembledTransaction.build<number>({ publicKey: key.publicKey(), rpcUrl: "http://localhost/rpc", allowHttp: true, server, networkPassphrase, contractId, method: "answer", parseResultXdr: val => arm(val, "scvU32").u32 });
   const executor = (signer = keypairSigner(key), maxFeeStroops = 10000n) => new TransactionExecutor({ rpc: server, networkPassphrase, signer, maxFeeStroops });
   return { rpc, server, build, executor, get sends() { return sends; } };
 }
@@ -68,7 +69,7 @@ describe("transaction execution", () => {
     const executor = f.executor({ address: key.publicKey(), async signTransaction(...args) { wallets++; return signer.signTransaction(...args); } });
     f.rpc.getLedgerEntries = async () => {
       const response = resourceConfigFixture();
-      response.entries[0]!.val.configSetting().contractCompute().txMaxInstructions(xdr.Int64.fromString("9999"));
+      Reflect.set(arm(arm(response.entries[0]!.val, "configSetting").configSetting, "configSettingContractComputeV0").contractCompute, "txMaxInstructions", xdr.Int64.fromString("9999"));
       return response;
     };
     await expect(executor.execute(f.build)).rejects.toMatchObject({ code: "RESOURCE_LIMIT" });
@@ -81,13 +82,13 @@ describe("transaction execution", () => {
       const f = fixture(), signer = keypairSigner(key); let signed = false, unsignedSize = 0;
       f.rpc.getLedgerEntries = async () => {
         const response = resourceConfigFixture();
-        if (mode === "limits-change" && signed) response.entries[0]!.val.configSetting().contractCompute().txMaxInstructions(xdr.Int64.fromString("9999"));
-        if (mode === "signature-size" && signed) response.entries[3]!.val.configSetting().contractBandwidth().txMaxSizeBytes(unsignedSize);
+        if (mode === "limits-change" && signed) Reflect.set(arm(arm(response.entries[0]!.val, "configSetting").configSetting, "configSettingContractComputeV0").contractCompute, "txMaxInstructions", xdr.Int64.fromString("9999"));
+        if (mode === "signature-size" && signed) Reflect.set(arm(arm(response.entries[3]!.val, "configSetting").configSetting, "configSettingContractBandwidthV0").contractBandwidth, "txMaxSizeBytes", unsignedSize);
         if (mode === "stale-ledger" && signed) response.latestLedger = 99;
         return response;
       };
       const executor = f.executor({ address: key.publicKey(), async signTransaction(envelope, options) {
-        unsignedSize = TransactionBuilder.fromXDR(envelope, networkPassphrase).toEnvelope().toXDR().length;
+        unsignedSize = TransactionBuilder.fromXdr(envelope, networkPassphrase).toEnvelope().toXdr().length;
         const result = await signer.signTransaction(envelope, options); signed = true; return result;
       } });
       await expect(executor.execute(f.build)).rejects.toMatchObject(mode === "stale-ledger" ? { code: "RESOURCE_CONFIG" }
@@ -207,7 +208,7 @@ describe("transaction execution", () => {
     const send = f.rpc.sendTransaction;
     f.server.sendTransaction = async tx => {
       if (!(tx instanceof Transaction) || tx.operations[0]?.type !== "invokeHostFunction") throw new Error("Expected a contract call");
-      submittedMethod = tx.operations[0].func.invokeContract().functionName().toString();
+      submittedMethod = arm(tx.operations[0].func, "hostFunctionTypeInvokeContract").invokeContract.functionName.toString();
       return await send(tx) as Api.SendTransactionResponse;
     };
     const executor = new TransactionExecutor({ rpc: f.server, networkPassphrase, signer: keypairSigner(key), maxFeeStroops: 10000n,
@@ -257,9 +258,9 @@ describe("transaction execution", () => {
     for (const kind of ["address", "addressV2", "addressWithDelegates"] as const) {
       const f = fixture(); const authorizer = Keypair.random();
       let entry = unsignedAuthorization(authorizer.publicKey());
-      if (kind === "addressV2") entry.credentials(xdr.SorobanCredentials.sorobanCredentialsAddressV2(entry.credentials().address()));
+      if (kind === "addressV2") Reflect.set(entry, "credentials", xdr.SorobanCredentials.sorobanCredentialsAddressV2(arm(entry.credentials, "sorobanCredentialsAddress").address));
       if (kind === "addressWithDelegates") entry = buildWithDelegatesEntry({ entry, validUntilLedgerSeq: 0, delegates: [{ address: key.publicKey(), signature: xdr.ScVal.scvU32(7) }] });
-      const original = entry.toXDR("base64");
+      const original = entry.toXdr("base64");
       const simulate = f.rpc.simulateTransaction;
       f.server.simulateTransaction = async (tx, _resources, mode) => {
         if (mode === "enforce") {
@@ -270,16 +271,16 @@ describe("transaction execution", () => {
           expect(info.address).toBe(authorizer.publicKey());
           expect(info.nonce).toBe(123n);
           expect(info.signatureExpirationLedger).toBe(200);
-          expect(signed.rootInvocation().toXDR("base64")).toBe(entry.rootInvocation().toXDR("base64"));
-          expect(authorizer.verify(hash(buildAuthorizationEntryPreimage(signed, 200, networkPassphrase).toXDR()), info.signers[0]!.signatures![0]!.signature)).toBe(true);
-          if (kind === "addressWithDelegates") expect(info.signers[1]!.rawSignature.u32()).toBe(7);
+          expect(signed.rootInvocation.toXdr("base64")).toBe(entry.rootInvocation.toXdr("base64"));
+          expect(authorizer.verify(hash(buildAuthorizationEntryPreimage(signed, 200, networkPassphrase).toXdr()), info.signers[0]!.signatures![0]!.signature)).toBe(true);
+          if (kind === "addressWithDelegates") expect(arm(info.signers[1]!.rawSignature, "scvU32").u32).toBe(7);
         }
         return { ...await simulate(), result: { auth: [entry], retval: xdr.ScVal.scvU32(42) } };
       };
       const assembled = await f.build();
       const executor = new TransactionExecutor({ rpc: f.server, networkPassphrase, signer: keypairSigner(key), maxFeeStroops: 10000n, authorizationSigners: [keypairSigner(authorizer)] });
       expect((await executor.execute(() => Promise.resolve(assembled))).result).toBe(43);
-      expect(entry.toXDR("base64")).toBe(original);
+      expect(entry.toXdr("base64")).toBe(original);
       expect(assembled.built!.operations[0]!.type).toBe("invokeHostFunction");
       expect(f.sends).toBe(1);
     }
@@ -288,11 +289,11 @@ describe("transaction execution", () => {
     const f = fixture();
     const entries = [123, 124, 125].map((nonce, index) => {
       const entry = unsignedAuthorization(key.publicKey());
-      entry.credentials().address().nonce(xdr.Int64.fromString(String(nonce)));
-      entry.rootInvocation().function().contractFn().args([xdr.ScVal.scvU32(index)]);
+      Reflect.set(arm(entry.credentials, "sorobanCredentialsAddress").address, "nonce", xdr.Int64.fromString(String(nonce)));
+      Reflect.set(arm(entry.rootInvocation.function, "sorobanAuthorizedFunctionTypeContractFn").contractFn, "args", [xdr.ScVal.scvU32(index)]);
       return entry;
     });
-    const original = entries.map(entry => entry.toXDR("base64"));
+    const original = entries.map(entry => entry.toXdr("base64"));
     const simulate = f.rpc.simulateTransaction;
     let enforced = 0;
     f.server.simulateTransaction = async (tx, _resources, mode) => {
@@ -303,17 +304,17 @@ describe("transaction execution", () => {
         for (const [index, entry] of signed.entries()) {
           const info = inspectAuthEntry(entry);
           expect(info.nonce).toBe(BigInt(123 + index));
-          expect(entry.rootInvocation().toXDR("base64")).toBe(entries[index]!.rootInvocation().toXDR("base64"));
-          expect(key.verify(hash(buildAuthorizationEntryPreimage(entry, 200, networkPassphrase).toXDR()), info.signers[0]!.signatures![0]!.signature)).toBe(true);
+          expect(entry.rootInvocation.toXdr("base64")).toBe(entries[index]!.rootInvocation.toXdr("base64"));
+          expect(key.verify(hash(buildAuthorizationEntryPreimage(entry, 200, networkPassphrase).toXdr()), info.signers[0]!.signatures![0]!.signature)).toBe(true);
         }
         enforced++;
       }
       return { ...await simulate(), result: { auth: entries, retval: xdr.ScVal.scvU32(42) } };
     };
-    expect((await f.executor().execute(f.build, { authorizations: entries.map(entry => ({ address: key.publicKey(), invocation: entry.rootInvocation().toXDR("base64") })) })).result).toBe(43);
+    expect((await f.executor().execute(f.build, { authorizations: entries.map(entry => ({ address: key.publicKey(), invocation: entry.rootInvocation.toXdr("base64") })) })).result).toBe(43);
     expect(enforced).toBe(1);
     expect(f.sends).toBe(1);
-    expect(entries.map(entry => entry.toXDR("base64"))).toEqual(original);
+    expect(entries.map(entry => entry.toXdr("base64"))).toEqual(original);
   });
   test("rejects an invalid authorization ledger before asking the wallet or submitting", async () => {
     for (const sequence of [NaN, 0, -1, 1.5, 0xffff_ffff - 99]) {
@@ -353,7 +354,7 @@ describe("transaction execution", () => {
     const f = fixture();
     const signer: FuulSigner = { address: key.publicKey(), async signTransaction() {
       const tx = new TransactionBuilder(new Account(key.publicKey(), "1"), { fee: "9999", networkPassphrase }).addOperation(new Contract(contractId).call("answer")).setTimeout(60).build();
-      tx.sign(key); return { signedTxXdr: tx.toXDR() };
+      tx.sign(key); return { signedTxXdr: tx.toXdr() };
     } };
     await expect(f.executor(signer).execute(f.build)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
     expect(f.sends).toBe(0);
@@ -437,7 +438,7 @@ describe("transaction execution", () => {
   });
   test("distinguishes a confirmed payment from a result decoding failure", async () => {
     const f = fixture();
-    const tx = await f.build(); tx.options.parseResultXdr = value => { if (value.u32() === 43) throw new Error("incompatible confirmed result"); return value.u32(); };
+    const tx = await f.build(); tx.options.parseResultXdr = value => { if (arm(value, "scvU32").u32 === 43) throw new Error("incompatible confirmed result"); return arm(value, "scvU32").u32; };
     await expect(f.executor().execute(() => Promise.resolve(tx))).rejects.toMatchObject({ code: "RESULT_DECODE_FAILED" });
     expect(f.sends).toBe(1);
   });
@@ -447,8 +448,8 @@ describe("transaction execution", () => {
       const signer = { ...keypairSigner(key), signTransaction: async () => { signs++; throw new Error("must not sign"); } };
       const tx = await f.build();
       tx.options.parseResultXdr = value => {
-        if (invalidPass === "initial" || value.switch().name !== "scvU32") throw new TypeError("incompatible return type");
-        return value.u32();
+        if (invalidPass === "initial" || value.type !== "scvU32") throw new TypeError("incompatible return type");
+        return value.u32;
       };
       if (invalidPass === "enforced") {
         const simulate = f.rpc.simulateTransaction;
@@ -482,26 +483,26 @@ describe("submission and confirmation", () => {
     const f = fixture(); const tx = (await f.build()).built!;
     const cosigner = Keypair.random(); tx.sign(cosigner);
     const wallet: FuulSigner = { address: key.publicKey(), async signTransaction(envelope) {
-      const changed = TransactionBuilder.fromXDR(envelope, networkPassphrase);
+      const changed = TransactionBuilder.fromXdr(envelope, networkPassphrase);
       changed.signatures.splice(0); changed.sign(key);
-      return { signedTxXdr: changed.toXDR() };
+      return { signedTxXdr: changed.toXdr() };
     } };
     await expect(signPreparedTransaction(tx, wallet, 10000n)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
     const signed = await signPreparedTransaction(tx, keypairSigner(key), 10000n);
-    expect(signed.signatures.map(signature => signature.toXDR("base64"))).toContain(tx.signatures[0]!.toXDR("base64"));
+    expect(signed.signatures.map(signature => signature.toXdr("base64"))).toContain(tx.signatures[0]!.toXdr("base64"));
     expect(signed.signatures.length).toBe(2);
   });
   test("rejects a wallet that adds a garbage or foreign signature instead of the signer's own", async () => {
     const f = fixture(); const tx = (await f.build()).built!;
     const garbage = { address: key.publicKey(), signTransaction: async (envelope: string) => {
-      const copy = TransactionBuilder.fromXDR(envelope, networkPassphrase) as Transaction;
+      const copy = TransactionBuilder.fromXdr(envelope, networkPassphrase) as Transaction;
       copy.signatures.push(new xdr.DecoratedSignature({ hint: key.signatureHint(), signature: Buffer.alloc(64, 7) }));
-      return { signedTxXdr: copy.toXDR() };
+      return { signedTxXdr: copy.toXdr() };
     } };
     await expect(signPreparedTransaction(tx, garbage, 10000n)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
     const foreign = { address: key.publicKey(), signTransaction: async (envelope: string) => {
-      const copy = TransactionBuilder.fromXDR(envelope, networkPassphrase) as Transaction; copy.sign(Keypair.random());
-      return { signedTxXdr: copy.toXDR() };
+      const copy = TransactionBuilder.fromXdr(envelope, networkPassphrase) as Transaction; copy.sign(Keypair.random());
+      return { signedTxXdr: copy.toXdr() };
     } };
     await expect(signPreparedTransaction(tx, foreign, 10000n)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
     const padded = { address: key.publicKey(), signTransaction: async (envelope: string) => ({ signedTxXdr: " " + envelope }) };
@@ -511,7 +512,7 @@ describe("submission and confirmation", () => {
   test("binds a confirmed observation to the returned envelope, not the echoed hash", async () => {
     const f = fixture(); const tx = (await f.build()).built!; tx.sign(key);
     const other = new TransactionBuilder(new Account(key.publicKey(), "77"), { fee: "9999", networkPassphrase }).addOperation(new Contract(contractId).call("answer")).setTimeout(60).build(); other.sign(key);
-    const hash = tx.hash().toString("hex");
+    const hash = Buffer.from(tx.hash()).toString("hex");
     f.rpc.getTransaction = async requested => ({ status: Api.GetTransactionStatus.SUCCESS, txHash: requested, ledger: 105, envelopeXdr: other.toEnvelope(), returnValue: xdr.ScVal.scvU32(43) });
     await expect(waitForTransaction(f.server, hash, { networkPassphrase })).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN" });
     await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash } });
@@ -527,14 +528,14 @@ describe("submission and confirmation", () => {
     // The independent deadline makes a pre-fix hang fail promptly without leaving timers behind.
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await expect(Promise.race([pending, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("submission did not cancel")), 100); })])).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: tx.hash().toString("hex") } });
+      await expect(Promise.race([pending, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("submission did not cancel")), 100); })])).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: Buffer.from(tx.hash()).toString("hex") } });
     } finally { clearTimeout(timer); }
     expect(attempts).toBe(1);
   });
   test("bounds a stalled submission and identity read without losing outcome semantics", async () => {
     const f = fixture(); const tx = (await f.build()).built!; tx.sign(key);
     f.rpc.sendTransaction = () => new Promise(() => {});
-    await expect(submitSignedTransaction(f.server, tx, { timeoutMs: 10 })).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: tx.hash().toString("hex") } });
+    await expect(submitSignedTransaction(f.server, tx, { timeoutMs: 10 })).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: Buffer.from(tx.hash()).toString("hex") } });
     f.rpc.getNetwork = () => new Promise(() => {});
     await expect(submitSignedTransaction(f.server, tx, { timeoutMs: 10 })).rejects.toMatchObject({ code: "NETWORK_ERROR" });
     const controller = new AbortController();
@@ -546,25 +547,25 @@ describe("submission and confirmation", () => {
   test("retains the transaction hash for malformed acknowledgements and incomplete confirmation records", async () => {
     const f = fixture(); const tx = (await f.build()).built!; tx.sign(key);
     f.server.sendTransaction = async () => ({ status: "PENDING" }) as Api.SendTransactionResponse;
-    await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: tx.hash().toString("hex") } });
+    await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: Buffer.from(tx.hash()).toString("hex") } });
     const rpc = { getTransaction: async () => ({ status: Api.GetTransactionStatus.SUCCESS, ledger: 102 }) } as unknown as Server;
-    await expect(waitForTransaction(rpc, tx.hash().toString("hex"), { networkPassphrase })).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN" });
+    await expect(waitForTransaction(rpc, Buffer.from(tx.hash()).toString("hex"), { networkPassphrase })).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN" });
   });
   test("a lost submission response retains the exact hash without resubmitting", async () => {
     const f = fixture(); let attempts = 0;
     const tx = (await f.build()).built!; tx.sign(key);
     f.rpc.sendTransaction = async () => { attempts++; throw new Error("connection lost after acceptance"); };
-    await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: tx.hash().toString("hex") } });
+    await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN", details: { hash: Buffer.from(tx.hash()).toString("hex") } });
     expect(attempts).toBe(1);
     f.rpc.getTransaction = async txHash => ({ status: Api.GetTransactionStatus.SUCCESS, txHash, ledger: 102, envelopeXdr: tx.toEnvelope(), returnValue: xdr.ScVal.scvU32(43) });
-    expect((await waitForTransaction(f.server, tx.hash().toString("hex"), { networkPassphrase })).ledger).toBe(102);
+    expect((await waitForTransaction(f.server, Buffer.from(tx.hash()).toString("hex"), { networkPassphrase })).ledger).toBe(102);
   });
   test("retries failed reads but never a rejected submission", async () => {
     const f = fixture(); let reads = 0;
     const tx = (await f.build()).built!; tx.sign(key);
     f.rpc.getTransaction = async hash => { if (++reads === 1) throw new Error("temporary transport failure"); return { status: Api.GetTransactionStatus.SUCCESS, txHash: hash, ledger: 104, envelopeXdr: tx.toEnvelope(), returnValue: xdr.ScVal.scvU32(1) }; };
-    expect((await waitForTransaction(f.server, tx.hash().toString("hex"), { networkPassphrase, pollIntervalMs: 1 })).ledger).toBe(104);
-    f.rpc.sendTransaction = async () => ({ status: "TRY_AGAIN_LATER", hash: tx.hash().toString("hex") });
+    expect((await waitForTransaction(f.server, Buffer.from(tx.hash()).toString("hex"), { networkPassphrase, pollIntervalMs: 1 })).ledger).toBe(104);
+    f.rpc.sendTransaction = async () => ({ status: "TRY_AGAIN_LATER", hash: Buffer.from(tx.hash()).toString("hex") });
     await expect(submitSignedTransaction(f.server, tx)).rejects.toMatchObject({ code: "OUTCOME_UNKNOWN" });
   });
   test("timeout and cancellation preserve an unknown outcome", async () => {
@@ -589,7 +590,7 @@ describe("submission and confirmation", () => {
     const payer = Keypair.random();
     const feeBump = TransactionBuilder.buildFeeBumpTransaction(payer.publicKey(), "200", inner, networkPassphrase);
     const signed = await signPreparedTransaction(feeBump, keypairSigner(payer), 10000n);
-    expect(signed.innerTransaction.toXDR()).toBe(inner.toXDR());
+    expect(signed.innerTransaction.toXdr()).toBe(inner.toXdr());
     expect(signed.feeSource).toBe(payer.publicKey());
     expect(signed.signatures.length).toBe(1);
     expect((await submitSignedTransaction(f.server, signed)).ledger).toBe(102);
@@ -602,16 +603,16 @@ describe("authorization intent boundaries", () => {
     for (const mode of ["contract", "function", "arguments", "child", "duplicate", "source", "late-invalid"] as const) {
       const f = fixture(); const other = Keypair.random(); let signs = 0;
       const entry = unsignedAuthorization(mode === "source" ? key.publicKey() : other.publicKey());
-      const root = entry.rootInvocation().function().contractFn();
-      if (mode === "contract") root.contractAddress(new Address(StrKey.encodeContract(Buffer.alloc(32, 99))).toScAddress());
-      if (mode === "function") root.functionName("transfer");
-      if (mode === "arguments") root.args([xdr.ScVal.scvU32(999)]);
-      if (mode === "child") entry.rootInvocation().subInvocations([unsignedAuthorization(other.publicKey()).rootInvocation()]);
+      const root = arm(entry.rootInvocation.function, "sorobanAuthorizedFunctionTypeContractFn").contractFn;
+      if (mode === "contract") Reflect.set(root, "contractAddress", new Address(StrKey.encodeContract(Buffer.alloc(32, 99))).toScAddress());
+      if (mode === "function") Reflect.set(root, "functionName", new xdr.XdrString("transfer"));
+      if (mode === "arguments") Reflect.set(root, "args", [xdr.ScVal.scvU32(999)]);
+      if (mode === "child") Reflect.set(entry.rootInvocation, "subInvocations", [unsignedAuthorization(other.publicKey()).rootInvocation]);
       const entries = [entry];
       if (mode === "duplicate" || mode === "late-invalid") {
         const extra = unsignedAuthorization(other.publicKey());
-        extra.credentials().address().nonce(xdr.Int64.fromString("124"));
-        if (mode === "late-invalid") extra.rootInvocation().function().contractFn().functionName("steal");
+        Reflect.set(arm(extra.credentials, "sorobanCredentialsAddress").address, "nonce", xdr.Int64.fromString("124"));
+        if (mode === "late-invalid") Reflect.set(arm(extra.rootInvocation.function, "sorobanAuthorizedFunctionTypeContractFn").contractFn, "functionName", new xdr.XdrString("steal"));
         entries.push(extra);
       }
       const simulate = f.rpc.simulateTransaction;
@@ -627,11 +628,11 @@ describe("authorization intent boundaries", () => {
 
   test("does not let a declared tree authorize another contract", async () => {
     const f = fixture(); const other = Keypair.random(); const entry = unsignedAuthorization(other.publicKey());
-    entry.rootInvocation().function().contractFn().contractAddress(new Address(StrKey.encodeContract(Buffer.alloc(32, 98))).toScAddress());
+    Reflect.set(arm(entry.rootInvocation.function, "sorobanAuthorizedFunctionTypeContractFn").contractFn, "contractAddress", new Address(StrKey.encodeContract(Buffer.alloc(32, 98))).toScAddress());
     const simulate = f.rpc.simulateTransaction;
     f.server.simulateTransaction = async () => ({ ...await simulate(), result: { auth: [entry], retval: xdr.ScVal.scvU32(42) } });
     const executor = new TransactionExecutor({ rpc: f.server, networkPassphrase, signer: keypairSigner(key), maxFeeStroops: 10000n, authorizationSigners: [keypairSigner(other)] });
-    await expect(executor.execute(f.build, { authorizations: [{ address: other.publicKey(), invocation: entry.rootInvocation().toXDR("base64") }] })).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
+    await expect(executor.execute(f.build, { authorizations: [{ address: other.publicKey(), invocation: entry.rootInvocation.toXdr("base64") }] })).rejects.toMatchObject({ code: "INVALID_TRANSACTION" });
     expect(f.sends).toBe(0);
   });
 
@@ -678,8 +679,8 @@ describe("authorization intent boundaries", () => {
   test("rejects an extra foreign signature even with a valid signer signature", async () => {
     const f = fixture(); const tx = (await f.build()).built!;
     const signer = { ...keypairSigner(key), async signTransaction(envelope: string) {
-      const copy = TransactionBuilder.fromXDR(envelope, networkPassphrase); copy.sign(key, Keypair.random());
-      return { signedTxXdr: copy.toXDR() };
+      const copy = TransactionBuilder.fromXdr(envelope, networkPassphrase); copy.sign(key, Keypair.random());
+      return { signedTxXdr: copy.toXdr() };
     } };
     await expect(signPreparedTransaction(tx, signer, 10000n)).rejects.toMatchObject({ code: "WALLET_MUTATION" });
   });

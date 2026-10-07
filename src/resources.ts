@@ -1,4 +1,5 @@
 import { FeeBumpTransaction, Transaction, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
+import { Buffer } from "buffer";
 import type { Server } from "@stellar/stellar-sdk/rpc";
 import { FuulError } from "./errors.js";
 
@@ -51,35 +52,42 @@ export async function readSorobanResourceLimits(rpc: ResourceRpc, networkPassphr
   const protocol = typeof reported === "number" ? reported
     : typeof reported === "string" && /^[1-9][0-9]{0,8}$/.test(reported) ? Number(reported) : Number.NaN;
   if (!Number.isInteger(protocol) || protocol < 27) configError("Resource checks require Protocol 27 or later");
-  const keys = configNames.map(name => xdr.LedgerKey.configSetting(new xdr.LedgerKeyConfigSetting({ configSettingId: xdr.ConfigSettingId[name]() })));
+  const keys = configNames.map(name => xdr.LedgerKey.configSetting(new xdr.LedgerKeyConfigSetting({ configSettingId: xdr.ConfigSettingId[name] })));
   const response = await rpc.getLedgerEntries(...keys);
   try {
     ledger(response.latestLedger);
     if (response.entries.length !== keys.length) configError("RPC omitted or duplicated resource settings");
     const values = new Map<string, xdr.ConfigSettingEntry>();
-    const expected = new Set(keys.map(key => key.toXDR("base64")));
+    const expected = new Set(keys.map(key => key.toXdr("base64")));
     for (const entry of response.entries) {
-      const encoded = entry.key.toXDR("base64");
-      if (!expected.delete(encoded) || entry.val.switch().name !== "configSetting") configError("RPC returned an unexpected resource setting");
-      const setting = entry.val.configSetting();
-      if (entry.key.configSetting().configSettingId().name !== setting.switch().name) configError("Resource setting key and value disagree");
+      const encoded = entry.key.toXdr("base64");
+      if (!expected.delete(encoded) || entry.val.type !== "configSetting" || entry.key.type !== "configSetting") configError("RPC returned an unexpected resource setting");
+      const setting = entry.val.configSetting;
+      if (entry.key.configSetting.configSettingId.name !== setting.type) configError("Resource setting key and value disagree");
       if (entry.lastModifiedLedgerSeq !== undefined) {
         ledger(entry.lastModifiedLedgerSeq);
         if (entry.lastModifiedLedgerSeq > response.latestLedger) configError("Resource setting comes from a future ledger");
       }
-      values.set(setting.switch().name, setting);
+      values.set(setting.type, setting);
     }
-    const compute = values.get(configNames[0])!.contractCompute();
-    const cost = values.get(configNames[1])!.contractLedgerCost();
+    const computeEntry = values.get(configNames[0])!;
+    const costEntry = values.get(configNames[1])!;
+    const extended = values.get(configNames[2])!;
+    const bandwidth = values.get(configNames[3])!;
+    const keySize = values.get(configNames[4])!;
+    if (computeEntry.type !== configNames[0] || costEntry.type !== configNames[1] || extended.type !== configNames[2]
+      || bandwidth.type !== configNames[3] || keySize.type !== configNames[4]) configError("Resource setting types disagree");
+    const compute = computeEntry.contractCompute;
+    const cost = costEntry.contractLedgerCost;
     const limits: SorobanResourceLimits = {
       networkPassphrase, protocolVersion: protocol, ledger: response.latestLedger,
       maximum: {
-        instructions: compute.txMaxInstructions().toBigInt(), diskReadBytes: BigInt(cost.txMaxDiskReadBytes()),
-        writeBytes: BigInt(cost.txMaxWriteBytes()), diskReadEntries: BigInt(cost.txMaxDiskReadEntries()),
-        writeEntries: BigInt(cost.txMaxWriteLedgerEntries()),
-        footprintEntries: BigInt(values.get(configNames[2])!.contractLedgerCostExt().txMaxFootprintEntries()),
-        transactionBytes: BigInt(values.get(configNames[3])!.contractBandwidth().txMaxSizeBytes()),
-        largestKeyBytes: BigInt(values.get(configNames[4])!.contractDataKeySizeBytes()),
+        instructions: compute.txMaxInstructions, diskReadBytes: BigInt(cost.txMaxDiskReadBytes),
+        writeBytes: BigInt(cost.txMaxWriteBytes), diskReadEntries: BigInt(cost.txMaxDiskReadEntries),
+        writeEntries: BigInt(cost.txMaxWriteLedgerEntries),
+        footprintEntries: BigInt(extended.contractLedgerCostExt.txMaxFootprintEntries),
+        transactionBytes: BigInt(bandwidth.contractBandwidth.txMaxSizeBytes),
+        largestKeyBytes: BigInt(keySize.contractDataKeySizeBytes),
       },
     };
     validateLimits(limits);
@@ -95,13 +103,13 @@ function sorobanTransaction(transaction: Transaction | FeeBumpTransaction): Tran
   const operations = inner.operations;
   const isSoroban = operations.some(op => ["invokeHostFunction", "restoreFootprint", "extendFootprintTtl"].includes(op.type));
   const envelope = inner.toEnvelope();
-  const hasData = envelope.switch().name === "envelopeTypeTx" && envelope.v1().tx().ext().switch() === 1;
+  const hasData = envelope.type === "envelopeTypeTx" && envelope.v1.tx.ext.type === "sorobanData";
   if (!isSoroban && !hasData) return undefined;
   if (!isSoroban || operations.length !== 1 || !hasData) invalid("Soroban transaction must have one Soroban operation and resource data");
   return inner;
 }
 function persistent(key: xdr.LedgerKey): boolean {
-  return key.switch().name === "contractCode" || (key.switch().name === "contractData" && key.contractData().durability().name === "persistent");
+  return key.type === "contractCode" || (key.type === "contractData" && key.contractData.durability.name === "persistent");
 }
 
 /** Inspect declared resources against a supplied snapshot. Classic transactions return undefined.
@@ -113,18 +121,20 @@ export function inspectSorobanResources(transaction: Transaction | FeeBumpTransa
   if (transaction.networkPassphrase !== limits.networkPassphrase) throw new FuulError("NETWORK_MISMATCH", "Resource settings belong to a different network");
   const inner = sorobanTransaction(transaction);
   if (!inner) return undefined;
-  const data = inner.toEnvelope().v1().tx().ext().sorobanData(), resources = data.resources();
-  const read = resources.footprint().readOnly(), write = resources.footprint().readWrite(), footprint = [...read, ...write];
+  const envelope = inner.toEnvelope();
+  if (envelope.type !== "envelopeTypeTx" || envelope.v1.tx.ext.type !== "sorobanData") invalid("Missing Soroban transaction data");
+  const data = envelope.v1.tx.ext.sorobanData, resources = data.resources;
+  const read = resources.footprint.readOnly, write = resources.footprint.readWrite, footprint = [...read, ...write];
   const seen = new Set<string>();
   let largestKeyBytes = 0;
   for (const key of footprint) {
-    if (!["account", "trustline", "contractData", "contractCode"].includes(key.switch().name)) invalid("Soroban footprint contains an unsupported ledger key");
-    const encoded = key.toXDR("base64");
+    if (!["account", "trustline", "contractData", "contractCode"].includes(key.type)) invalid("Soroban footprint contains an unsupported ledger key");
+    const encoded = key.toXdr("base64");
     if (seen.has(encoded)) invalid("Soroban footprint contains a duplicate ledger key");
     seen.add(encoded);
-    largestKeyBytes = Math.max(largestKeyBytes, key.toXDR().length);
+    largestKeyBytes = Math.max(largestKeyBytes, key.toXdr().length);
   }
-  const archived = data.ext().switch() === 1 ? data.ext().resourceExt().archivedSorobanEntries() : [];
+  const archived = data.ext.type === "resourceExt" ? data.ext.resourceExt.archivedSorobanEntries : [];
   let previous = -1;
   for (const index of archived) {
     if (index <= previous || index >= write.length || !persistent(write[index]!)) invalid("Soroban archived entry indexes must be sorted, unique and refer to persistent write entries");
@@ -132,20 +142,20 @@ export function inspectSorobanResources(transaction: Transaction | FeeBumpTransa
   }
   const restoring = inner.operations[0]!.type === "restoreFootprint";
   if (restoring && (read.length > 0 || write.some(key => !persistent(key)))) invalid("Restore footprint must contain only persistent write entries");
-  if (inner.operations[0]!.type === "extendFootprintTtl" && (write.length > 0 || read.some(key => !["contractData", "contractCode"].includes(key.switch().name)))) {
+  if (inner.operations[0]!.type === "extendFootprintTtl" && (write.length > 0 || read.some(key => !["contractData", "contractCode"].includes(key.type)))) {
     invalid("TTL footprint must contain only Soroban read entries");
   }
   const diskReads = restoring ? write.length
-    : footprint.filter(key => !["contractData", "contractCode"].includes(key.switch().name)).length + archived.length;
+    : footprint.filter(key => !["contractData", "contractCode"].includes(key.type)).length + archived.length;
   const usage = Object.freeze({
-    instructions: BigInt(resources.instructions()), diskReadBytes: BigInt(resources.diskReadBytes()), writeBytes: BigInt(resources.writeBytes()),
+    instructions: BigInt(resources.instructions), diskReadBytes: BigInt(resources.diskReadBytes), writeBytes: BigInt(resources.writeBytes),
     diskReadEntries: BigInt(diskReads), writeEntries: BigInt(write.length), footprintEntries: BigInt(footprint.length),
-    transactionBytes: BigInt(inner.toEnvelope().toXDR().length), largestKeyBytes: BigInt(largestKeyBytes),
+    transactionBytes: BigInt(inner.toEnvelope().toXdr().length), largestKeyBytes: BigInt(largestKeyBytes),
   });
   const snapshot = Object.freeze({ ...limits, maximum: Object.freeze({ ...limits.maximum }) });
   const violations = names.filter(name => usage[name] > snapshot.maximum[name])
     .map(resource => Object.freeze({ resource, actual: usage[resource].toString(), maximum: snapshot.maximum[resource].toString() }));
-  return Object.freeze({ hash: transaction.hash().toString("hex"), limits: snapshot, usage, violations: Object.freeze(violations) });
+  return Object.freeze({ hash: Buffer.from(transaction.hash()).toString("hex"), limits: snapshot, usage, violations: Object.freeze(violations) });
 }
 
 /** Read current limits and reject an oversized transaction without signing or submitting it.
@@ -153,7 +163,7 @@ export function inspectSorobanResources(transaction: Transaction | FeeBumpTransa
  */
 export async function checkSorobanResources(rpc: ResourceRpc, transaction: Transaction | FeeBumpTransaction, minimumLedger = 1): Promise<SorobanResourceReport | undefined> {
   ledger(minimumLedger);
-  const snapshot = TransactionBuilder.fromXDR(transaction.toXDR(), transaction.networkPassphrase);
+  const snapshot = TransactionBuilder.fromXdr(transaction.toXdr(), transaction.networkPassphrase);
   if (!sorobanTransaction(snapshot)) return undefined;
   const limits = await readSorobanResourceLimits(rpc, snapshot.networkPassphrase);
   if (limits.ledger < minimumLedger) configError("Resource settings are older than the transaction simulation");

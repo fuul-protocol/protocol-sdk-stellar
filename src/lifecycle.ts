@@ -1,4 +1,5 @@
 import { Account, Contract, Operation, SorobanDataBuilder, StrKey, Transaction, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
+import { Buffer } from "buffer";
 import type { Server } from "@stellar/stellar-sdk/rpc";
 import { FuulError } from "./errors.js";
 import { validateContractId } from "./validation.js";
@@ -21,16 +22,18 @@ export async function getContractState(rpc: Pick<Server, "getLedgerEntries">, co
   if (!Number.isInteger(result.latestLedger) || result.latestLedger < 1 || result.latestLedger > 0xffff_ffff) throw new Error("RPC returned an invalid contract observation ledger");
   if (!result.entries.length) throw new Error("Contract instance is missing or archived; inspect the deployment and restoration requirements");
   const entry = result.entries[0]!;
-  if (result.entries.length !== 1 || entry.key.toXDR("base64") !== instanceKey.toXDR("base64")) throw new Error("RPC returned an unexpected contract instance observation");
+  if (result.entries.length !== 1 || entry.key.toXdr("base64") !== instanceKey.toXdr("base64")) throw new Error("RPC returned an unexpected contract instance observation");
   if (entry.liveUntilLedgerSeq !== undefined && (!Number.isInteger(entry.liveUntilLedgerSeq) || entry.liveUntilLedgerSeq < 0 || entry.liveUntilLedgerSeq > 0xffff_ffff)) throw new Error("RPC returned an invalid contract instance TTL");
-  const data = entry.val.contractData();
-  const expected = instanceKey.contractData();
-  if (data.contract().toXDR("base64") !== expected.contract().toXDR("base64") || data.key().toXDR("base64") !== expected.key().toXDR("base64") || data.durability().name !== "persistent") throw new Error("RPC contract instance data does not match the requested key");
-  const executable = data.val().instance().executable();
-  const kind = executable.switch().name;
+  if (entry.val.type !== "contractData" || instanceKey.type !== "contractData") throw new Error("RPC returned invalid contract instance data");
+  const data = entry.val.contractData;
+  const expected = instanceKey.contractData;
+  if (data.contract.toXdr("base64") !== expected.contract.toXdr("base64") || data.key.toXdr("base64") !== expected.key.toXdr("base64") || data.durability.name !== "persistent") throw new Error("RPC contract instance data does not match the requested key");
+  if (data.val.type !== "scvContractInstance") throw new Error("RPC returned invalid contract instance data");
+  const executable = data.val.instance.executable;
+  const kind = executable.type;
   return {
     contractId, ledger: result.latestLedger, liveUntilLedger: entry.liveUntilLedgerSeq,
-    wasmHash: kind === "contractExecutableWasm" ? executable.wasmHash().toString("hex") : undefined,
+    wasmHash: kind === "contractExecutableWasm" ? Buffer.from(executable.wasmHash.toBytes()).toString("hex") : undefined,
     executable: kind === "contractExecutableWasm" ? "wasm" : kind === "contractExecutableStellarAsset" ? "stellarAsset" : "external",
     state: entry.liveUntilLedgerSeq === undefined ? "unknown" : entry.liveUntilLedgerSeq < result.latestLedger ? "expired" : "live",
     instanceKey,
@@ -68,26 +71,27 @@ function invalidPreparation(message: string): never {
 function inspectLifecyclePreparation(response: Transaction, expectedXdr: string, networkPassphrase: string, maximum: bigint): Transaction {
   if (!(response instanceof Transaction) || response.networkPassphrase !== networkPassphrase) invalidPreparation("returned a different transaction type or network");
   // Keep the result independent from an RPC adapter that retains its response.
-  const prepared = new Transaction(response.toXDR(), networkPassphrase);
-  const expected = xdr.TransactionEnvelope.fromXDR(expectedXdr, "base64").v1().tx();
+  const prepared = new Transaction(response.toXdr(), networkPassphrase);
+  const expectedEnvelope = xdr.TransactionEnvelope.fromXdr(expectedXdr, "base64");
+  if (expectedEnvelope.type !== "envelopeTypeTx" || expectedEnvelope.v1.tx.ext.type !== "sorobanData") invalidPreparation("requires Soroban transaction data");
+  const expected = expectedEnvelope.v1.tx;
   const envelope = prepared.toEnvelope();
-  if (envelope.switch().name !== "envelopeTypeTx" || envelope.v1().signatures().length !== 0) invalidPreparation("must return an unsigned v1 transaction");
-  const body = envelope.v1().tx();
-  if (body.ext().switch() !== 1) invalidPreparation("removed the Soroban transaction data");
-  const data = body.ext().sorobanData();
+  if (envelope.type !== "envelopeTypeTx" || envelope.v1.signatures.length !== 0) invalidPreparation("must return an unsigned v1 transaction");
+  const body = envelope.v1.tx;
+  if (body.ext.type !== "sorobanData") invalidPreparation("removed the Soroban transaction data");
+  const data = body.ext.sorobanData;
   const fee = BigInt(prepared.fee);
   if (fee > maximum) throw new FuulError("FEE_LIMIT", "Lifecycle transaction exceeds maxFeeStroops", { feeStroops: prepared.fee, maxFeeStroops: maximum.toString() });
-  if (data.resourceFee().toBigInt() < 0n || fee < data.resourceFee().toBigInt() + BigInt(expected.fee())) invalidPreparation("returned inconsistent resource and inclusion fees");
-  const footprint = data.resources().footprint();
-  const expectedFootprint = expected.ext().sorobanData().resources().footprint();
-  const keys = (entries: xdr.LedgerKey[]) => entries.map(entry => entry.toXDR("base64")).sort();
-  if (JSON.stringify(keys(footprint.readOnly())) !== JSON.stringify(keys(expectedFootprint.readOnly()))
-    || JSON.stringify(keys(footprint.readWrite())) !== JSON.stringify(keys(expectedFootprint.readWrite()))) invalidPreparation("changed the requested ledger entries or their access classes");
+  if (data.resourceFee < 0n || fee < data.resourceFee + BigInt(expected.fee)) invalidPreparation("returned inconsistent resource and inclusion fees");
+  const footprint = data.resources.footprint;
+  const expectedFootprint = expectedEnvelope.v1.tx.ext.sorobanData.resources.footprint;
+  const keys = (entries: xdr.LedgerKey[]) => entries.map(entry => entry.toXdr("base64")).sort();
+  if (JSON.stringify(keys(footprint.readOnly)) !== JSON.stringify(keys(expectedFootprint.readOnly))
+    || JSON.stringify(keys(footprint.readWrite)) !== JSON.stringify(keys(expectedFootprint.readWrite))) invalidPreparation("changed the requested ledger entries or their access classes");
   // Compare all other envelope fields, including source, sequence, conditions,
   // memo, operation count, operation sources, kind, and extension target.
-  const comparison = xdr.Transaction.fromXDR(body.toXDR());
-  comparison.fee(expected.fee()); comparison.ext(expected.ext());
-  if (comparison.toXDR("base64") !== expected.toXDR("base64")) invalidPreparation("changed the requested transaction body");
+  const comparison = new xdr.Transaction({ ...body, fee: expected.fee, ext: expected.ext });
+  if (comparison.toXdr("base64") !== expected.toXdr("base64")) invalidPreparation("changed the requested transaction body");
   return prepared;
 }
 
@@ -97,21 +101,21 @@ export async function prepareLifecycleTransaction(rpc: Pick<Server, "getNetwork"
   action: LifecycleRequest; maxFeeStroops: bigint; timeoutSeconds?: number;
 }): Promise<Transaction> {
   // Snapshot the complete request before any RPC call can yield to application code.
-  input = { ...input, keys: input.keys.map(key => xdr.LedgerKey.fromXDR(key.toXDR())), action: { ...input.action } };
+  input = { ...input, keys: input.keys.map(key => xdr.LedgerKey.fromXdr(key.toXdr())), action: { ...input.action } };
   if (!StrKey.isValidEd25519PublicKey(input.source)) throw new TypeError("lifecycle source must be a Stellar account");
   if (!input.keys.length) throw new TypeError("lifecycle footprint must not be empty");
   if (typeof input.maxFeeStroops !== "bigint" || input.maxFeeStroops <= 0n) throw new RangeError("maxFeeStroops must be positive");
   const timeout = input.timeoutSeconds ?? 300;
   if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new RangeError("timeoutSeconds must be positive");
-  const encoded = input.keys.map(key => key.toXDR("base64"));
+  const encoded = input.keys.map(key => key.toXdr("base64"));
   if (new Set(encoded).size !== encoded.length) throw new TypeError("lifecycle footprint contains duplicate keys");
   if (input.action.kind !== "restore" && input.action.kind !== "extend") throw new TypeError("lifecycle action must be restore or extend");
   for (const key of input.keys) {
-    const kind = key.switch().name;
+    const kind = key.type;
     if (kind !== "contractCode" && kind !== "contractData") {
       throw new TypeError("lifecycle operations require contract data or Wasm keys");
     }
-    if (input.action.kind === "restore" && kind === "contractData" && key.contractData().durability().name !== "persistent") {
+    if (input.action.kind === "restore" && kind === "contractData" && key.contractData.durability.name !== "persistent") {
       throw new TypeError("restoration requires persistent contract data or Wasm keys");
     }
   }
@@ -128,6 +132,6 @@ export async function prepareLifecycleTransaction(rpc: Pick<Server, "getNetwork"
   if (account.accountId() !== input.source) invalidPreparation("returned a different source account");
   const transaction = new TransactionBuilder(new Account(input.source, account.sequenceNumber()), { fee: "100", networkPassphrase: input.networkPassphrase })
     .addOperation(operation).setSorobanData(data.build()).setTimeout(timeout).build();
-  const expectedXdr = transaction.toXDR();
+  const expectedXdr = transaction.toXdr();
   return inspectLifecyclePreparation(await rpc.prepareTransaction(transaction), expectedXdr, input.networkPassphrase, input.maxFeeStroops);
 }

@@ -6,7 +6,7 @@ Disposable keys remain in memory. The suites support a local network and public 
 
 ## Prepare
 
-Use Node.js 22 or 24, Bun 1.3.12, Rust 1.92.0, and Stellar CLI 27.1.0.
+Use Node.js 22.12 or later, Bun 1.3.12, Rust 1.92.0, and Stellar CLI 27.1.0.
 For local tests, start Docker with Compose.
 Clone the contracts repository beside this repository as `protocol-contracts-stellar`.
 Use the contracts commit from `contracts.json`. Set `FUUL_CONTRACTS_PATH` if its location differs.

@@ -1,4 +1,3 @@
-import { Buffer } from "buffer";
 import { Address } from "@stellar/stellar-sdk";
 import {
   AssembledTransaction,
@@ -77,7 +76,7 @@ export interface Client {
   /**
    * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  upgrade: ({new_wasm_hash, operator}: {new_wasm_hash: Buffer, operator: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  upgrade: ({new_wasm_hash, operator}: {new_wasm_hash: Uint8Array, operator: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a has_role transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -152,7 +151,7 @@ export interface Client {
   /**
    * Construct and simulate a project_wasm_hash transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  project_wasm_hash: (options?: MethodOptions) => Promise<AssembledTransaction<Buffer>>
+  project_wasm_hash: (options?: MethodOptions) => Promise<AssembledTransaction<Uint8Array>>
 
   /**
    * Construct and simulate a set_fee_collector transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -223,14 +222,14 @@ export interface Client {
 export class Client extends ContractClient {
   static async deploy<T = Client>(
         /** Constructor/Initialization Args for the contract's `__constructor` method */
-        {admin, manager, fee_collector, project_wasm_hash}: {admin: string, manager: string, fee_collector: string, project_wasm_hash: Buffer},
+        {admin, manager, fee_collector, project_wasm_hash}: {admin: string, manager: string, fee_collector: string, project_wasm_hash: Uint8Array},
     /** Options for initializing a Client as well as for calling a method, with extras specific to deploying. */
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
         /** The hash of the Wasm blob, which must already be installed on-chain. */
-        wasmHash: Buffer | string;
+        wasmHash: Uint8Array | string;
         /** Salt used to generate the contract's ID. Passed through to {@link Operation.createCustomContract}. Default: random. */
-        salt?: Buffer | Uint8Array;
+        salt?: Uint8Array;
         /** The format used to decode `wasmHash`, if it's provided as a string. */
         format?: "hex" | "base64";
       }
@@ -303,7 +302,7 @@ export class Client extends ContractClient {
         contract_tracker: this.txFromJSON<u128>,
         get_role_members: this.txFromJSON<Array<string>>,
         has_manager_role: this.txFromJSON<boolean>,
-        project_wasm_hash: this.txFromJSON<Buffer>,
+        project_wasm_hash: this.txFromJSON<Uint8Array>,
         set_fee_collector: this.txFromJSON<null>,
         default_admin_role: this.txFromJSON<string>,
         default_remove_fee: this.txFromJSON<u32>,

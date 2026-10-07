@@ -1,3 +1,4 @@
+import { arm } from "./fixtures/xdr.js";
 import { expect, test } from "bun:test";
 import { Contract, Networks, StrKey, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk";
 import type { Api } from "@stellar/stellar-sdk/rpc";
@@ -12,7 +13,7 @@ test("every core binding encodes the upgrade operator and decodes its executable
   for (const Client of [FactoryContract.Client, ManagerContract.Client, ProjectContract.Client]) {
     const spec = new Client(options).spec;
     const args = spec.funcArgsToScVals("upgrade", { new_wasm_hash: hash, operator: account });
-    expect(args.map(value => value.switch().name)).toEqual(["scvBytes", "scvAddress"]);
+    expect(args.map(value => value.type)).toEqual(["scvBytes", "scvAddress"]);
     expect(args.map(scValToNative)).toEqual([hash, account]);
     const value = xdr.ScVal.scvMap([
       new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("new_wasm_hash"), val: nativeToScVal(hash) }),
@@ -34,7 +35,7 @@ test("current bindings preserve full numeric domains in actual ScVal arguments",
     tokenId: max, deadline: max, proof: Buffer.alloc(32), signers: [account] });
   const encoded = manager.spec.funcArgsToScVals("claim", { caller: account, checks: [check] });
   expect(scValToNative(encoded[1]!)[0]).toMatchObject({ token_id: max, deadline: max, amount: 1n });
-  const fields = new Map(encoded[1]!.vec()![0]!.map()!.map(field => [field.key().sym().toString(), field.val().switch().name]));
+  const fields = new Map(arm(arm(encoded[1]!, "scvVec").vec![0]!, "scvMap").map!.map(field => [arm(field.key, "scvSymbol").sym.toString(), field.val.type]));
   expect(fields.get("token_id")).toBe("scvU256");
   expect(fields.get("deadline")).toBe("scvU256");
   expect(fields.get("amount")).toBe("scvI128");
@@ -44,11 +45,11 @@ test("current bindings preserve full numeric domains in actual ScVal arguments",
     ["set_currency_token_limit", { caller: account, token: contractId, limit: max }, "scvU256", max],
   ] as const) {
     const value = manager.spec.funcArgsToScVals(method, args).at(-1)!;
-    expect(value.switch().name).toBe(type);
+    expect(value.type).toBe(type);
     expect(scValToNative(value)).toBe(expected);
   }
   expect(project.spec.funcArgsToScVals("claim", { manager: contractId, to: account, currency: contractId,
-    currency_type: currencyType.stellarAsset, amount: 1n, token_id: max, proof: Buffer.alloc(32), kyc_registered: false })[5]!.switch().name).toBe("scvU256");
+    currency_type: currencyType.stellarAsset, amount: 1n, token_id: max, proof: Buffer.alloc(32), kyc_registered: false })[5]!.type).toBe("scvU256");
 });
 
 test("Manager spec decodes both actor events without inventing an actor for historical empty data", () => {

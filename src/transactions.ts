@@ -97,9 +97,9 @@ export async function waitForTransaction(rpc: Pick<Server, "getTransaction">, ha
       if (options.networkPassphrase !== undefined) {
         let observed: string | undefined;
         try {
-          const envelope = TransactionBuilder.fromXDR(response.envelopeXdr, options.networkPassphrase);
-          observed = envelope.hash().toString("hex");
-          if (observed !== hash.toLowerCase() && envelope instanceof FeeBumpTransaction) observed = envelope.innerTransaction.hash().toString("hex");
+          const envelope = TransactionBuilder.fromXdr(response.envelopeXdr, options.networkPassphrase);
+          observed = Buffer.from(envelope.hash()).toString("hex");
+          if (observed !== hash.toLowerCase() && envelope instanceof FeeBumpTransaction) observed = Buffer.from(envelope.innerTransaction.hash()).toString("hex");
         } catch { observed = undefined; }
         if (observed !== hash.toLowerCase()) throw new FuulError("OUTCOME_UNKNOWN", "RPC returned a different transaction for the requested hash", { hash });
       }
@@ -117,7 +117,7 @@ export async function submitSignedTransaction(rpc: TransactionRpc, transaction: 
   options = { ...options };
   const { timeoutMs } = settings(options);
   aborted(options.signal);
-  transaction = TransactionBuilder.fromXDR(transaction.toXDR(), transaction.networkPassphrase);
+  transaction = TransactionBuilder.fromXdr(transaction.toXdr(), transaction.networkPassphrase);
   let network: Awaited<ReturnType<TransactionRpc["getNetwork"]>>;
   try { network = await boundedRequest(rpc.getNetwork(), timeoutMs, options.signal); }
   catch (cause) {
@@ -127,7 +127,7 @@ export async function submitSignedTransaction(rpc: TransactionRpc, transaction: 
   if (network.passphrase !== transaction.networkPassphrase) throw new FuulError("NETWORK_MISMATCH", "RPC network does not match the transaction");
   if (!transaction.signatures.length) throw new FuulError("INVALID_TRANSACTION", "Transaction has no envelope signatures");
   await beforeSubmission(() => checkSorobanResources(rpc, transaction, options.minimumResourceLedger), timeoutMs, options.signal);
-  const hash = transaction.hash().toString("hex");
+  const hash = Buffer.from(transaction.hash()).toString("hex");
   aborted(options.signal);
   const deadline = Date.now() + timeoutMs;
   let response: Api.SendTransactionResponse;
@@ -163,9 +163,9 @@ export function keypairSigner(keypair: Keypair): FuulSigner {
     },
     async signTransaction(envelope, options) {
       if (!options?.networkPassphrase || options.address !== address || options.submit) throw new FuulError("INVALID_TRANSACTION", "Invalid signer network, account, or submission request");
-      const transaction = TransactionBuilder.fromXDR(envelope, options.networkPassphrase);
+      const transaction = TransactionBuilder.fromXdr(envelope, options.networkPassphrase);
       transaction.sign(keypair);
-      return { signedTxXdr: transaction.toXDR(), signerAddress: address };
+      return { signedTxXdr: transaction.toXdr(), signerAddress: address };
     },
   };
 }
@@ -183,9 +183,9 @@ export async function signPreparedTransaction(transaction: Transaction | FeeBump
   assertUnexpired(transaction);
   if (transaction instanceof FeeBumpTransaction && !inner.signatures.length) throw new FuulError("INVALID_TRANSACTION", "Fee-bump inner transaction must already be signed");
   // Snapshot before awaiting a wallet callback; do not trust a mutable caller-owned object.
-  const envelope = transaction.toXDR();
+  const envelope = transaction.toXdr();
   const expectedHash = transaction.hash();
-  const existingSignatures = transaction.signatures.map(signature => signature.toXDR("base64"));
+  const existingSignatures = transaction.signatures.map(signature => signature.toXdr("base64"));
   const networkPassphrase = transaction.networkPassphrase;
   const signed = await signer.signTransaction(envelope, { networkPassphrase, address: signerAddress, submit: false });
   if (signed.error) throw new FuulError("WALLET_REJECTED", "Wallet declined to sign the transaction", {}, { cause: signed.error });
@@ -193,8 +193,8 @@ export async function signPreparedTransaction(transaction: Transaction | FeeBump
   let result: Transaction | FeeBumpTransaction;
   try { result = decodeCosigningEnvelope(signed.signedTxXdr, networkPassphrase); }
   catch (cause) { throw new FuulError("WALLET_MUTATION", "Wallet returned an invalid transaction envelope", {}, { cause }); }
-  if (result.toEnvelope().switch().value !== transaction.toEnvelope().switch().value || !result.hash().equals(expectedHash)) throw new FuulError("WALLET_MUTATION", "Wallet changed the prepared transaction body");
-  const returnedSignatures = result.signatures.map(signature => signature.toXDR("base64"));
+  if (result.toEnvelope().type !== transaction.toEnvelope().type || !Buffer.from(result.hash()).equals(Buffer.from(expectedHash))) throw new FuulError("WALLET_MUTATION", "Wallet changed the prepared transaction body");
+  const returnedSignatures = result.signatures.map(signature => signature.toXdr("base64"));
   for (const signature of existingSignatures) {
     const index = returnedSignatures.indexOf(signature);
     if (index < 0) throw new FuulError("WALLET_MUTATION", "Wallet removed an existing envelope signature");
@@ -206,8 +206,8 @@ export async function signPreparedTransaction(transaction: Transaction | FeeBump
   if (StrKey.isValidEd25519PublicKey(signerAddress)) {
     const key = Keypair.fromPublicKey(signerAddress);
     const hint = key.rawPublicKey().subarray(-4);
-    const added = result.signatures.filter(signature => returnedSignatures.includes(signature.toXDR("base64")));
-    if (!added.some(signature => signature.hint().equals(hint) && signature.signature().length === 64 && key.verify(expectedHash, signature.signature()))) {
+    const added = result.signatures.filter(signature => returnedSignatures.includes(signature.toXdr("base64")));
+    if (!added.some(signature => Buffer.from(signature.hint.toBytes()).equals(Buffer.from(hint)) && signature.signature.toBytes().length === 64 && key.verify(expectedHash, signature.signature.toBytes()))) {
       throw new FuulError("WALLET_MUTATION", "Wallet did not add a valid signature from the signer account");
     }
   }
@@ -245,31 +245,31 @@ export async function cosignPreparedTransaction(
   if (typeof signer.signTransaction !== "function") throw new TypeError("Cosigner must provide signTransaction");
   const sign = signer.signTransaction.bind(signer);
   const passphrase = transaction.networkPassphrase;
-  const original = decodeCosigningEnvelope(transaction.toXDR(), passphrase);
+  const original = decodeCosigningEnvelope(transaction.toXdr(), passphrase);
   const source = original instanceof FeeBumpTransaction ? original.feeSource : original.source;
   if (typeof options.expectedSource !== "string" || options.expectedSource !== source) throw new FuulError("INVALID_TRANSACTION", "Transaction source differs from the reviewed source");
-  if (original.hash().toString("hex") !== options.expectedHash) throw new FuulError("INVALID_TRANSACTION", "Transaction differs from the reviewed hash");
+  if (Buffer.from(original.hash()).toString("hex") !== options.expectedHash) throw new FuulError("INVALID_TRANSACTION", "Transaction differs from the reviewed hash");
   if (BigInt(original.fee) > options.maxFeeStroops) throw new FuulError("FEE_LIMIT", "Transaction exceeds maxFeeStroops");
   assertUnexpired(original);
   if (original instanceof FeeBumpTransaction && !original.innerTransaction.signatures.length) throw new FuulError("INVALID_TRANSACTION", "Fee-bump inner transaction must already be signed");
   const key = Keypair.fromPublicKey(address);
   const expectedHint = key.rawPublicKey().subarray(-4);
   const hash = original.hash();
-  const valid = (signature: typeof original.signatures[number]) => signature.hint().equals(expectedHint)
-    && signature.signature().length === 64 && key.verify(hash, signature.signature());
+  const valid = (signature: typeof original.signatures[number]) => Buffer.from(signature.hint.toBytes()).equals(Buffer.from(expectedHint))
+    && signature.signature.toBytes().length === 64 && key.verify(hash, signature.signature.toBytes());
   if (original.signatures.length >= 20) throw new FuulError("INVALID_TRANSACTION", "Transaction has no room for another envelope signature");
   if (original.signatures.some(valid)) throw new FuulError("INVALID_TRANSACTION", "This account already signed the envelope");
-  const existing = original.signatures.map(signature => signature.toXDR("base64"));
-  const envelope = original.toXDR();
+  const existing = original.signatures.map(signature => signature.toXdr("base64"));
+  const envelope = original.toXdr();
   const signed = await beforeSubmission(() => sign(envelope, { networkPassphrase: passphrase, address, submit: false }), undefined, options.signal);
   if (signed?.error) throw new FuulError("WALLET_REJECTED", "Wallet declined to cosign the transaction", {}, { cause: signed.error });
   if (!signed || (signed.signerAddress !== undefined && signed.signerAddress !== address)) throw new FuulError("WALLET_MUTATION", "Wallet returned a different cosigner account");
   let result: Transaction | FeeBumpTransaction;
   try { result = decodeCosigningEnvelope(signed.signedTxXdr, passphrase); }
   catch (cause) { throw new FuulError("WALLET_MUTATION", "Wallet returned an invalid transaction envelope", {}, { cause }); }
-  if (result.toEnvelope().switch().value !== original.toEnvelope().switch().value || !result.hash().equals(hash)) throw new FuulError("WALLET_MUTATION", "Wallet changed the reviewed transaction body");
+  if (result.toEnvelope().type !== original.toEnvelope().type || !Buffer.from(result.hash()).equals(Buffer.from(hash))) throw new FuulError("WALLET_MUTATION", "Wallet changed the reviewed transaction body");
   if (result.signatures.length !== existing.length + 1
-    || existing.some((signature, index) => result.signatures[index]?.toXDR("base64") !== signature)) {
+    || existing.some((signature, index) => result.signatures[index]?.toXdr("base64") !== signature)) {
     throw new FuulError("WALLET_MUTATION", "Wallet must preserve existing signatures and append exactly one signature");
   }
   if (!valid(result.signatures.at(-1)!)) throw new FuulError("WALLET_MUTATION", "Wallet did not add a valid signature from the selected cosigner");
@@ -282,8 +282,8 @@ function decodeCosigningEnvelope(value: unknown, passphrase: string): Transactio
   if (typeof value !== "string" || value.length === 0 || value.length > 2 * 1024 * 1024
     || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)
     || Buffer.from(value, "base64").toString("base64") !== value) throw new TypeError("Cosigning requires bounded canonical base64 XDR");
-  const transaction = TransactionBuilder.fromXDR(value, passphrase);
-  if (transaction.toXDR() !== value) throw new TypeError("Cosigning requires canonical envelope XDR");
+  const transaction = TransactionBuilder.fromXdr(value, passphrase);
+  if (transaction.toXdr() !== value) throw new TypeError("Cosigning requires canonical envelope XDR");
   return transaction;
 }
 
@@ -398,7 +398,7 @@ export class TransactionExecutor {
     if (assembled.options.networkPassphrase !== networkPassphrase || assembled.options.publicKey !== signer.address) throw new FuulError("INVALID_TRANSACTION", "Prepared call uses a different network or source account");
     if (assembled.options.signTransaction || assembled.options.signAuthEntry || assembled.options.restore) throw new FuulError("INVALID_TRANSACTION", "Build calls without signing callbacks or automatic restoration");
     const parseResult = assembled.options.parseResultXdr.bind({ ...assembled.options });
-    let unsigned = TransactionBuilder.fromXDR(assembled.toXDR(), networkPassphrase);
+    let unsigned = TransactionBuilder.fromXdr(assembled.toXdr(), networkPassphrase);
     if (!(unsigned instanceof Transaction)) throw new FuulError("INVALID_TRANSACTION", "Expected a regular contract transaction");
     this.checkTransaction(unsigned, maxFeeStroops);
     // Authorization callbacks can yield to code that still owns `assembled`.
@@ -421,7 +421,7 @@ export class TransactionExecutor {
     // Wallet review can take longer than an RPC deadline. Cancellation still
     // releases the queue and prevents a late signed envelope from being sent.
     const transaction = await beforeSubmission(() => signPreparedTransaction(unsigned, signer, maxFeeStroops), undefined, confirmation.signal);
-    const hash = transaction.hash().toString("hex");
+    const hash = Buffer.from(transaction.hash()).toString("hex");
     this.pendingWindow = { hash, firstLedger: enforced.latestLedger, maxTime: Number(transaction.timeBounds!.maxTime) };
     let confirmed: ConfirmedTransaction;
     try {
@@ -442,11 +442,13 @@ export class TransactionExecutor {
     const envelope = transaction.toEnvelope();
     // Soroban transactions use the v1 envelope. Leave other regular envelopes
     // to the existing simulation and assembly validation when they have no auth.
-    if (envelope.switch().name !== "envelopeTypeTx") return transaction;
-    const entries = envelope.v1().tx().operations().flatMap(operation =>
-      operation.body().switch().name === "invokeHostFunction"
-        ? operation.body().invokeHostFunctionOp().auth().map((entry, index) => ({ entry, index, operation }))
-        : []);
+    if (envelope.type !== "envelopeTypeTx") return transaction;
+    const entries = envelope.v1.tx.operations.flatMap(operation => {
+      const body = operation.body;
+      if (body.type !== "invokeHostFunction") return [];
+      const invocation = body.invokeHostFunctionOp;
+      return invocation.auth.map((entry, index) => ({ entry, index, operation: invocation }));
+    });
     const pending = entries.map(item => ({ ...item, info: inspectAuthEntry(item.entry) }))
       .filter(item => item.info.address !== null && !item.info.signers[0]!.signed);
     // Validate the complete batch before a signature can leave this process.
@@ -454,20 +456,20 @@ export class TransactionExecutor {
     const implicit = new Set<string>();
     for (const item of pending) {
       const address = item.info.address!;
-      const invocation = item.entry.rootInvocation();
-      const host = item.operation.body().invokeHostFunctionOp().hostFunction();
-      if (host.switch().name !== "hostFunctionTypeInvokeContract" || invocation.function().switch().name !== "sorobanAuthorizedFunctionTypeContractFn") {
+      const invocation = item.entry.rootInvocation;
+      const host = item.operation.hostFunction;
+      if (host.type !== "hostFunctionTypeInvokeContract" || invocation.function.type !== "sorobanAuthorizedFunctionTypeContractFn") {
         throw new FuulError("INVALID_TRANSACTION", "Unexpected authorization function");
       }
-      const call = host.invokeContract();
-      const root = invocation.function().contractFn();
-      if (!root.contractAddress().toXDR().equals(call.contractAddress().toXDR()) || root.functionName().toString() !== call.functionName().toString()) {
+      const call = host.invokeContract;
+      const root = invocation.function.contractFn;
+      if (!Buffer.from(root.contractAddress.toXdr()).equals(Buffer.from(call.contractAddress.toXdr())) || root.functionName.toString() !== call.functionName.toString()) {
         throw new FuulError("INVALID_TRANSACTION", "Authorization targets a different contract or function");
       }
-      const match = expected.findIndex(value => value.address === address && value.invocation === invocation.toXDR("base64"));
+      const match = expected.findIndex(value => value.address === address && value.invocation === invocation.toXdr("base64"));
       if (match >= 0) { expected.splice(match, 1); continue; }
       const exact = address !== this.options.signer.address && !implicit.has(address)
-        && invocation.subInvocations().length === 0 && root.toXDR().equals(call.toXDR());
+        && invocation.subInvocations.length === 0 && Buffer.from(root.toXdr()).equals(Buffer.from(call.toXdr()));
       if (!exact || confirmation.authorizations !== undefined) throw new FuulError("INVALID_TRANSACTION", "Authorization is outside the application's declared intent");
       implicit.add(address);
     }
@@ -490,11 +492,11 @@ export class TransactionExecutor {
       for (const item of pending.filter(item => item.info.address === address)) {
         aborted(confirmation.signal);
         const signed = await authorizeEntry(item.entry, async preimage => {
-          const result = await beforeSubmission(() => signAuthEntry(preimage.toXDR("base64"), { address }), undefined, confirmation.signal);
+          const result = await beforeSubmission(() => signAuthEntry(preimage.toXdr("base64"), { address }), undefined, confirmation.signal);
           if (result.error) throw new FuulError("WALLET_REJECTED", "Wallet declined to authorize the transaction", {}, { cause: result.error });
           return Buffer.from(result.signedAuthEntry, "base64");
         }, ledger.sequence + 100, this.options.networkPassphrase);
-        item.operation.body().invokeHostFunctionOp().auth()[item.index] = signed;
+        item.operation.auth[item.index] = signed;
       }
     }
     return new Transaction(envelope, this.options.networkPassphrase);
@@ -508,7 +510,7 @@ export class TransactionExecutor {
 
 function authorizationBytes(transaction: Transaction): string {
   return transaction.operations.map(operation => operation.type === "invokeHostFunction"
-    ? (operation.auth ?? []).map(entry => entry.toXDR("base64")).join(",") : "").join(";");
+    ? (operation.auth ?? []).map(entry => entry.toXdr("base64")).join(",") : "").join(";");
 }
 
 function ledgerTimestamp(value: unknown): number {

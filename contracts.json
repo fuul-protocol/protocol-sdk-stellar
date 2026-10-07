@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "sourceRepository": "https://github.com/fuul-protocol/protocol-contracts-stellar",
   "stellarCli": "27.1.0",
-  "stellarSdk": "16.3.0",
+  "stellarSdk": "17.2.1",
   "platform": "darwin-arm64",
   "source": {
     "commit": "58991b892394d08b218251a77a087710f3523db1",
@@ -138,18 +138,19 @@
   "contracts": {
     "fuul-manager": {
       "upstreamBindingSha256": "d7a68b9cd05c7bedad4b272b9ee65e8dbf655b1278f37b079cb6b8dc96972d5e",
-      "bindingSha256": "bd196147d41e561883a4d3ce7b52034afe80f990f8595a8b7bf82a0e0abace32",
+      "bindingSha256": "d960b721aa6fb1a246abaa46c7d6b2337077cbebfdc85df1de47146b39d7109e",
       "wasmSha256": "6a60035d615fac77b360e08d2616f6bf339d240336d2385579fd9d9b441ae605"
     },
     "fuul-factory": {
       "upstreamBindingSha256": "a34723228eb385cdd73b0acc3e4faa86c26538880064aec58d0290a942fc5cc2",
-      "bindingSha256": "d142374e0d136ee6c49f83012aa88fa2f22afb31b0710ef8f14859ca9f88cebb",
+      "bindingSha256": "0ab1e5d6001568658072a6623b5161a0eaaa3ab995c6f06aa2ed7e87a4127248",
       "wasmSha256": "7fe118a8c1dbeb0767900d81360efa5e5e82f74fed124ac47db23f1d9e94284b"
     },
     "fuul-project": {
       "upstreamBindingSha256": "845e8c4ec1a41b8dc12f22ceb2aa71e11615ae7e1ccd17454ce31465a9858831",
-      "bindingSha256": "32d092b879048bf7499fdb7fef39c3d4e13401e21decd7498a3ea23de687b584",
+      "bindingSha256": "61cbfc1ab2647a029094b4e40ac852b9be81fcb4cc322a02b8f42de889b5d67a",
       "wasmSha256": "7a0f0c3c86ad58aa2513643801711af6c86bb4c94cf02195da799aa7b7eb8c38"
     }
-  }
+  },
+  "bindingTransform": "Remove the Buffer global and use Uint8Array byte types for Stellar SDK 17."
 }

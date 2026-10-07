@@ -38,7 +38,7 @@ export function claimAuthorizations(manager: string, checks: readonly ClaimCheck
         contractAddress: new Address(manager).toScAddress(), functionName: "claim", args: [value],
       })),
       subInvocations: [],
-    }).toXDR("base64");
+    }).toXdr("base64");
     return check.signers.map(address => { validateAddress(address, "claim signer"); return { address, invocation }; });
   });
   if (caller) {
@@ -56,7 +56,7 @@ export function claimAuthorizations(manager: string, checks: readonly ClaimCheck
       currency_type: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(check.currency_type.tag)]),
       signers: xdr.ScVal.scvVec(check.signers.map(address => new Address(address).toScVal())),
     }));
-    expected.push({ address: caller.address, invocation: call(manager, "claim", [new Address(caller.address).toScVal(), xdr.ScVal.scvVec(values)], child).toXDR("base64") });
+    expected.push({ address: caller.address, invocation: call(manager, "claim", [new Address(caller.address).toScVal(), xdr.ScVal.scvVec(values)], child).toXdr("base64") });
   }
   return expected;
 }

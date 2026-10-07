@@ -55,7 +55,7 @@ try {
     const baseSigner = keypairSigner(keypair);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const signer = { ...baseSigner, async signTransaction(xdr, options) {
-      const hash = TransactionBuilder.fromXDR(xdr, networkPassphrase).hash().toString('hex');
+      const hash = Buffer.from(TransactionBuilder.fromXdr(xdr, networkPassphrase).hash()).toString('hex');
       await writeFile(pendingFile, json({ hash, command, amount: args[0], proof: command === 'claim' ? args[1] : undefined, network, source, project, currency }), { flag: 'wx', mode: 0o600 });
       return baseSigner.signTransaction(xdr, options);
     } };
