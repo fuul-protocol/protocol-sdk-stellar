@@ -18,7 +18,13 @@ To install from source, build with Node.js 22.12 or later and Bun 1.3.12:
 ```sh
 bun install --frozen-lockfile
 bun run build
+npm pack
 ```
+
+CommonJS applications can use `require("@fuul/sdk-stellar")`.
+CommonJS TypeScript projects need TypeScript 5.8 or later.
+TypeScript applications use `module: "NodeNext"` and `moduleResolution: "NodeNext"`.
+For ESM, set `type: "module"` in the application package. Otherwise, TypeScript emits CommonJS.
 
 This release uses Stellar JS SDK 17.2.1. Use that version for Stellar transaction and XDR objects in your application.
 Stellar byte results use `Uint8Array`. Existing `Buffer` inputs remain valid.
@@ -68,7 +74,7 @@ The SDK does not store keys or select Mainnet addresses.
 bun run typecheck
 bun test ./test/
 bun run build
-node test/package.mjs
+npm run test:package
 bun audit
 ```
 

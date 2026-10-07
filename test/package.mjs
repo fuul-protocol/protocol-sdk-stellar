@@ -9,19 +9,25 @@ const root = new URL('../', import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'fuul-sdk-consumer-'));
 try {
 const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
-const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', temporary], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0];
-assert.ok(packed.files.some(file => file.path === 'dist/esm/index.js'));
-assert.ok(packed.files.some(file => file.path === 'dist/cjs/index.js'));
-assert.ok(packed.files.every(file => !/^(test|fixtures|\.local|node_modules|\.env)/.test(file.path)));
+assert.notEqual(pkg.private, true, 'The npm release must be publishable');
+assert.equal(pkg.publishConfig.access, 'public');
+// A publish dry run still needs a real local archive and consumer install.
+const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run=false', '--json', '--pack-destination', temporary], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0];
 const files = packed.files.map(file => file.path);
 const sources = (await readdir(new URL('src/', root), { recursive: true })).map(path => path.replaceAll('\\', '/')).filter(path => path.endsWith('.ts'));
 const outputs = ['esm', 'cjs'].flatMap(format => sources.flatMap(path =>
   ['.js', '.js.map', '.d.ts', '.d.ts.map'].map(extension => `dist/${format}/${path.slice(0, -3)}${extension}`)));
 outputs.push('dist/cjs/package.json');
 assert.deepEqual(files.filter(path => path.startsWith('dist/')).sort(), outputs.sort(), 'Packed builds must match the source tree');
+assert.deepEqual(files.filter(path => !path.startsWith('dist/')).sort(),
+  ['README.md', 'THIRD_PARTY_NOTICES.md', 'contracts.json', 'docs/api-guide.md', 'licenses/stellar-sdk-Apache-2.0.txt', 'package.json'].sort(),
+  'Only release files may enter the package');
+for (const entry of Object.values(pkg.exports)) for (const mode of ['import', 'require']) {
+  for (const path of Object.values(entry[mode])) assert(files.includes(path.slice(2)), `Missing export: ${path}`);
+}
 const consumer = join(temporary, 'consumer'); await mkdir(consumer);
 await writeFile(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', join(temporary, packed.filename)], { cwd: consumer, stdio: ['ignore', 'pipe', 'pipe'] });
+execFileSync('npm', ['install', '--dry-run=false', '--ignore-scripts', '--no-audit', '--no-fund', join(temporary, packed.filename)], { cwd: consumer, stdio: ['ignore', 'pipe', 'pipe'] });
 const imports = Object.keys(pkg.exports).map(name => pkg.name + (name === '.' ? '' : name.slice(1)));
 const behavior = `
 for (const name of ${JSON.stringify(imports)}) assert.ok(Object.keys(await load(name)).length, name);
