@@ -4,7 +4,10 @@ import type { Server } from "@stellar/stellar-sdk/rpc";
 export const target = process.env.FUUL_E2E_NETWORK ?? "local";
 if (!["local", "testnet"].includes(target)) throw new Error("E2E supports only local or Testnet");
 export const protocol = process.env.FUUL_E2E_PROTOCOL ?? "28";
-if (!["27", "28"].includes(protocol)) throw new Error("FUUL_E2E_PROTOCOL must be 27 or 28");
+if (target === "local" ? !["27", "28"].includes(protocol)
+  : !/^[1-9][0-9]{0,8}$/.test(protocol) || Number(protocol) < 27) {
+  throw new Error("Local protocols must be 27 or 28; Testnet requires Protocol 27 or later");
+}
 const port = process.env.FUUL_E2E_PORT ?? "18010";
 if (!/^[0-9]{4,5}$/.test(port) || Number(port) > 65535 || Number(port) < 1024) throw new Error("Invalid local test port");
 export const allowHttp = target === "local";

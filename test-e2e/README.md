@@ -37,6 +37,7 @@ bun run test:e2e testnet
 ```
 
 The suite verifies the network passphrase and protocol before funding or contract execution.
+The runner reads Testnet's current protocol unless `FUUL_E2E_PROTOCOL` specifies the expected version.
 It rejects Mainnet and arbitrary RPC endpoints. It does not load production keys.
 Some instances undergo upgrades to test-only replacements. These instances are not application deployments.
 Use the separate deployment guide for a retained deployment and video demonstration.
